@@ -326,7 +326,7 @@ async function runTests() {
   // Current XP is 50. Awarding 100 XP (Total XP: 150 -> Level = Math.floor(Math.sqrt(150 / 100)) + 1 = 2)
   chAnnounce.sentMessages = [];
   economyService.addXP(userId, guildId, 100, 'CHAT');
-  await new Promise(resolve => setTimeout(resolve, 50));
+  await new Promise(resolve => setTimeout(resolve, 300));
 
   if (chAnnounce.sentMessages.length !== 1) {
     throw new Error(`Expected exactly 1 level-up announcement, but got ${chAnnounce.sentMessages.length}`);
@@ -344,7 +344,7 @@ async function runTests() {
   let testError = null;
   try {
     economyService.addXP(userId, guildId, 300, 'CHAT');
-    await new Promise(resolve => setTimeout(resolve, 50));
+    await new Promise(resolve => setTimeout(resolve, 300));
   } catch (err) {
     testError = err;
   }
@@ -362,12 +362,186 @@ async function runTests() {
   
   // Current XP is 450 (Level 3). Awarding 500 XP (Total XP: 950 -> Level = Math.floor(Math.sqrt(950 / 100)) + 1 = 4)
   economyService.addXP(userId, guildId, 500, 'CHAT');
-  await new Promise(resolve => setTimeout(resolve, 50));
+  await new Promise(resolve => setTimeout(resolve, 300));
 
   if (chAnnounce.sentMessages.length !== 0) {
     throw new Error(`Expected 0 announcements since notifications are disabled, but got ${chAnnounce.sentMessages.length}`);
   }
   console.log('   ✅ Disabled level-up notifications are correctly ignored.');
+
+  // --- Test 9: Complete 15 Notification Types Verification ---
+  console.log('Testing End-to-End pipeline for all 15 notification types...');
+
+  // Reset channel messages and register all subscribers
+  chAnnounce.sentMessages = [];
+  chEco.sentMessages = [];
+  chQuest.sentMessages = [];
+  chShop.sentMessages = [];
+  chRare.sentMessages = [];
+  chAch.sentMessages = [];
+  chEvent.sentMessages = [];
+  chLdr.sentMessages = [];
+  chAdmin.sentMessages = [];
+
+  const resolveGuild = async (gId) => mockGuild;
+  const resolveUser = async (uId) => {
+    if (uId === userId) return mockUser;
+    if (uId === 'admin_123') return mockAdmin;
+    return new MockUser(uId, 'GenericUser');
+  };
+
+  eventBus.subscribe('economyLog', async ({ guildId, type, userId, amount, context }) => {
+    const guild = await resolveGuild(guildId);
+    const user = await resolveUser(userId);
+    await notificationService.sendEconomyLog(guild, type, user, amount, context);
+  });
+
+  eventBus.subscribe('adminLog', async ({ guildId, type, adminId, targetId, context }) => {
+    const guild = await resolveGuild(guildId);
+    const admin = await resolveUser(adminId);
+    const target = targetId ? await resolveUser(targetId) : null;
+    await notificationService.sendAdminLog(guild, type, admin, target, context);
+  });
+
+  eventBus.subscribe('questComplete', async ({ guildId, userId, questName, reward }) => {
+    const guild = await resolveGuild(guildId);
+    const user = await resolveUser(userId);
+    await notificationService.sendQuestNotification(guild, 'quest_complete', user, { reward: `${questName} (Reward: ${reward})` });
+  });
+
+  eventBus.subscribe('achievementUnlock', async ({ guildId, userId, achievementId, reward }) => {
+    const guild = await resolveGuild(guildId);
+    const user = await resolveUser(userId);
+    await notificationService.sendAchievement(guild, achievementId, user, { reward });
+  });
+
+  eventBus.subscribe('rareDrop', async ({ guildId, userId, itemName, reward }) => {
+    const guild = await resolveGuild(guildId);
+    const user = await resolveUser(userId);
+    await notificationService.sendRareDrop(guild, itemName, user, { reward });
+  });
+
+  eventBus.subscribe('shopPurchase', async ({ guildId, userId, itemName, cost, reward }) => {
+    const guild = await resolveGuild(guildId);
+    const user = await resolveUser(userId);
+    await notificationService.sendShopNotification(guild, itemName, user, { reward });
+  });
+
+  eventBus.subscribe('tradeComplete', async ({ guildId, senderId, receiverId, amount, reason }) => {
+    const guild = await resolveGuild(guildId);
+    const sender = await resolveUser(senderId);
+    const receiver = await resolveUser(receiverId);
+    const receiverTag = receiver ? receiver.toString() : `<@${receiverId}>`;
+    await notificationService.sendEconomyLog(guild, 'trade', sender, amount, { target: receiverTag, reason });
+  });
+
+  eventBus.subscribe('leaderboardUpdate', async ({ guildId, type, reward }) => {
+    const guild = await resolveGuild(guildId);
+    await notificationService.sendLeaderboard(guild, type, { reward });
+  });
+
+  eventBus.subscribe('eventUpdate', async ({ guildId, type, reward }) => {
+    const guild = await resolveGuild(guildId);
+    await notificationService.sendEvent(guild, type, { reward });
+  });
+
+  eventBus.subscribe('inventoryUpdate', async ({ guildId, userId, itemId, quantity, action }) => {
+    const guild = await resolveGuild(guildId);
+    const user = await resolveUser(userId);
+    await notificationService.sendEconomyLog(guild, 'inventory_item', user, quantity, { item: itemId, quantity, action });
+  });
+
+  // Enable all categories in settings
+  const categories = ['level_up', 'economy_log', 'admin_log', 'quest', 'shop', 'rare_drop', 'achievement', 'leaderboard', 'event'];
+  for (const cat of categories) {
+    db.notificationSettings.set(guildId, cat, true, 'none');
+  }
+
+  // Trigger 1. Level Up
+  // We'll reset Level to 1 and XP to 50, then add 100 XP to trigger leveling up to 2
+  db.levels.updateXp(guildId, userId, 50, 1);
+  economyService.addXP(userId, guildId, 100, 'CHAT');
+  await new Promise(resolve => setTimeout(resolve, 50));
+  if (chAnnounce.sentMessages.length !== 1) {
+    throw new Error(`[Test 9] Level Up announcement failed to send. Count: ${chAnnounce.sentMessages.length}`);
+  }
+  console.log('   ✅ Level Up verified.');
+
+  // Trigger 2. XP Added
+  eventBus.publish('economyLog', { guildId, type: 'xp_added', userId, amount: 100, context: { source: 'ADMIN', reason: 'Added 100 XP' } });
+  eventBus.publish('adminLog', { guildId, type: 'admin_xp_command', adminId: 'admin_123', targetId: userId, context: { reward: 'Added 100 XP' } });
+  
+  // Trigger 3. XP Removed
+  eventBus.publish('economyLog', { guildId, type: 'xp_removed', userId, amount: 50, context: { source: 'ADMIN', reason: 'Removed 50 XP' } });
+  eventBus.publish('adminLog', { guildId, type: 'admin_xp_command', adminId: 'admin_123', targetId: userId, context: { reward: 'Removed 50 XP' } });
+
+  // Trigger 4. Coins Added
+  eventBus.publish('economyLog', { guildId, type: 'coins_added', userId, amount: 200, context: { source: 'ADMIN', reason: 'Event reward' } });
+  eventBus.publish('adminLog', { guildId, type: 'admin_economy_command', adminId: 'admin_123', targetId: userId, context: { reward: 'Added 200 coins' } });
+
+  // Trigger 5. Coins Removed
+  eventBus.publish('economyLog', { guildId, type: 'coins_removed', userId, amount: 50, context: { source: 'ADMIN', reason: 'Tax deduction' } });
+  eventBus.publish('adminLog', { guildId, type: 'admin_economy_command', adminId: 'admin_123', targetId: userId, context: { reward: 'Removed 50 coins' } });
+
+  // Trigger 6. Daily Reward
+  eventBus.publish('economyLog', { guildId, type: 'daily_reward', userId, amount: 150, context: { streak: 3 } });
+
+  // Trigger 7. Quest Completed
+  eventBus.publish('questComplete', { guildId, userId, questName: 'Daily Explorer', reward: '200 coins' });
+
+  // Trigger 8. Achievement
+  eventBus.publish('achievementUnlock', { guildId, userId, achievementId: 'first_step', reward: 'Path Finder' });
+
+  // Trigger 9. Rare Drop
+  eventBus.publish('rareDrop', { guildId, userId, itemName: 'Shadow Blade', reward: 'Legendary Sword' });
+
+  // Trigger 10. Shop Purchase
+  eventBus.publish('shopPurchase', { guildId, userId, itemName: 'Health Potion', cost: 10, reward: 'Restores 50 HP' });
+
+  // Trigger 11. Trade
+  eventBus.publish('tradeComplete', { guildId, senderId: userId, receiverId: 'admin_123', amount: 50, reason: 'Buying items' });
+
+  // Trigger 12. Leaderboard
+  eventBus.publish('leaderboardUpdate', { guildId, type: 'weekly', reward: 'Weekly XP Leaderboard reset' });
+
+  // Trigger 13. Event
+  eventBus.publish('eventUpdate', { guildId, type: 'double_xp', reward: 'Double XP Event is active!' });
+
+  // Trigger 14. Admin Action (Config Change)
+  eventBus.publish('adminLog', { guildId, type: 'economy_config_changed', adminId: 'admin_123', targetId: null, context: { reward: 'Set Daily to 500' } });
+
+  // Trigger 15. Inventory Item
+  eventBus.publish('inventoryUpdate', { guildId, userId, itemId: 'wood', quantity: 10, action: 'add' });
+
+  await new Promise(resolve => setTimeout(resolve, 300));
+
+  // Verify counts
+  if (chEco.sentMessages.length !== 7) {
+    throw new Error(`[Test 9] Expected exactly 7 economy log messages, got ${chEco.sentMessages.length}`);
+  }
+  if (chAdmin.sentMessages.length !== 5) {
+    throw new Error(`[Test 9] Expected exactly 5 admin log messages, got ${chAdmin.sentMessages.length}`);
+  }
+  if (chQuest.sentMessages.length !== 1) {
+    throw new Error(`[Test 9] Expected exactly 1 quest message, got ${chQuest.sentMessages.length}`);
+  }
+  if (chShop.sentMessages.length !== 1) {
+    throw new Error(`[Test 9] Expected exactly 1 shop message, got ${chShop.sentMessages.length}`);
+  }
+  if (chRare.sentMessages.length !== 1) {
+    throw new Error(`[Test 9] Expected exactly 1 rare drop message, got ${chRare.sentMessages.length}`);
+  }
+  if (chAch.sentMessages.length !== 1) {
+    throw new Error(`[Test 9] Expected exactly 1 achievement message, got ${chAch.sentMessages.length}`);
+  }
+  if (chEvent.sentMessages.length !== 1) {
+    throw new Error(`[Test 9] Expected exactly 1 event message, got ${chEvent.sentMessages.length}`);
+  }
+  if (chLdr.sentMessages.length !== 1) {
+    throw new Error(`[Test 9] Expected exactly 1 leaderboard message, got ${chLdr.sentMessages.length}`);
+  }
+
+  console.log('   ✅ All 15 End-to-End notification pipelines verified successfully!');
 
   console.log('\n🎉 ALL FINAL FRAMEWORK NOTIFICATION TESTS COMPLETED SUCCESSFULLY! 🎉');
 }

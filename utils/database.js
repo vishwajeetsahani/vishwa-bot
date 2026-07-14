@@ -370,6 +370,7 @@ class SqlJsWrapper {
     try {
       this.db.exec('ALTER TABLE notification_settings ADD COLUMN mention_role_id TEXT DEFAULT NULL');
     } catch (e) {}
+    this.save();
   }
 
   exec(sql) {

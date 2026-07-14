@@ -56,6 +56,8 @@ class NotificationService {
       deposit: '🏦',
       withdraw: '💸',
       reward_transaction: '🪙',
+      trade: '🤝',
+      inventory_item: '📦',
       economy_config_changed: '🛠️',
       admin_economy_command: '🛡️',
       admin_xp_command: '🛡️',
@@ -102,9 +104,21 @@ class NotificationService {
 
     console.log(`[TRACE] _dispatchGeneric for type: ${type}, channelKey: ${channelKey}`);
 
-    // 1. Check if notification type is enabled
-    const settings = db.notificationSettings.get(guild.id, type);
-    console.log(`[TRACE] Settings for ${type}: enabled = ${settings.enabled}`);
+    // 1. Check if notification type is enabled (map specific type to category settings based on channelKey)
+    const categoryMapping = {
+      announcementChannel: 'level_up',
+      economyLogChannel: 'economy_log',
+      adminLogChannel: 'admin_log',
+      questChannel: 'quest',
+      shopChannel: 'shop',
+      rareDropChannel: 'rare_drop',
+      achievementChannel: 'achievement',
+      leaderboardChannel: 'leaderboard',
+      eventChannel: 'event'
+    };
+    const parentKey = categoryMapping[channelKey] || type;
+    const settings = db.notificationSettings.get(guild.id, parentKey);
+    console.log(`[TRACE] Settings for ${type} (mapped to category ${parentKey}): enabled = ${settings.enabled}`);
     if (!settings.enabled) {
       console.log(`[NotificationService] Skipped notification type "${type}" in "${guild.name}" — disabled in settings.`);
       return null;
@@ -239,7 +253,9 @@ class NotificationService {
       xp_reset: 'Reset {user}\'s XP balance.',
       deposit: '{user} deposited **{coins} coins** into the bank.',
       withdraw: '{user} withdrew **{coins} coins** from the bank.',
-      reward_transaction: 'Rewarded {user} **{coins} coins** (Source: {reward}).'
+      reward_transaction: 'Rewarded {user} **{coins} coins** (Source: {reward}).',
+      trade: '{user} transferred **{coins} coins** to {target}. Reason: {reward}',
+      inventory_item: '{user} {action}ed **{quantity}x {item}** in their inventory.'
     };
 
     const template = defaultTemplates[type] || 'Economy action: {reward}';

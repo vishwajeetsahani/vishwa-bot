@@ -92,6 +92,16 @@ module.exports = {
       });
       claimTx();
 
+      // Publish event to EventBus
+      const eventBus = require('../../../utils/eventBus');
+      eventBus.publish('economyLog', {
+        guildId,
+        type: 'daily_reward',
+        userId,
+        amount: totalReward,
+        context: { streak: currentStreak }
+      });
+
       // Build professional embed
       const embed = new EmbedBuilder()
         .setColor(0x5865F2)

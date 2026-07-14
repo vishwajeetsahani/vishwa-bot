@@ -61,6 +61,15 @@ module.exports = {
       const reloaded = db.configs.get(guildId);
       console.log(`[TRACE_CMD] Immediately after db.configs.update(). Returned configuration:`, reloaded);
 
+      const eventBus = require('../../../utils/eventBus');
+      eventBus.publish('adminLog', {
+        guildId,
+        type: 'economy_config_changed',
+        adminId: interaction.user.id,
+        targetId: null,
+        context: { reward: `Changed Community Hub channel to <#${channel.id}>` }
+      });
+
       const embed = embeds.create('success')
         .setTitle('🔧 Community Hub Configured')
         .setDescription(`Community channel has been successfully set to ${channel}.`);
@@ -79,6 +88,15 @@ module.exports = {
       const reloaded = db.configs.get(guildId);
       console.log(`[TRACE_CMD] Immediately after db.configs.update(). Returned configuration:`, reloaded);
 
+      const eventBus = require('../../../utils/eventBus');
+      eventBus.publish('adminLog', {
+        guildId,
+        type: 'economy_config_changed',
+        adminId: interaction.user.id,
+        targetId: null,
+        context: { reward: `Changed Economy Logs channel to <#${channel.id}>` }
+      });
+
       const embed = embeds.create('success')
         .setTitle('🔧 Economy Logs Channel Configured')
         .setDescription(`Economy modifications log channel has been successfully set to ${channel}.`);
@@ -96,6 +114,15 @@ module.exports = {
 
       const reloaded = db.configs.get(guildId);
       console.log(`[TRACE_CMD] Immediately after db.configs.update(). Returned configuration:`, reloaded);
+
+      const eventBus = require('../../../utils/eventBus');
+      eventBus.publish('adminLog', {
+        guildId,
+        type: 'economy_config_changed',
+        adminId: interaction.user.id,
+        targetId: null,
+        context: { reward: `Changed Economy Manager role to <@&${role.id}>` }
+      });
 
       const embed = embeds.create('success')
         .setTitle('🔧 Economy Manager Role Configured')

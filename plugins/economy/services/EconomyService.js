@@ -1,4 +1,5 @@
 const db = require('../../../utils/database');
+const eventBus = require('../../../utils/eventBus');
 
 const MAX_COINS = 999999999999999; // 999 trillion overflow limit
 
@@ -175,6 +176,14 @@ class EconomyService {
     });
 
     transferTx();
+
+    eventBus.publish('tradeComplete', {
+      guildId,
+      senderId,
+      receiverId,
+      amount,
+      reason
+    });
 
     return {
       senderBalance: senderNew,

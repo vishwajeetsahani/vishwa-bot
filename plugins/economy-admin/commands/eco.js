@@ -1,20 +1,7 @@
 const { SlashCommandBuilder, PermissionFlagsBits, EmbedBuilder } = require('discord.js');
 const container = require('../../../utils/container');
 const { enforceEconomyManager } = require('../middleware');
-
-/**
- * Helper to send economy logs to the configured channel.
- */
-async function sendEconomyLog(guild, client, embed) {
-  const db = container.resolve('db');
-  const config = db.configs.get(guild.id);
-  if (config && config.economyLogChannel) {
-    const channel = await guild.channels.fetch(config.economyLogChannel).catch(() => null);
-    if (channel) {
-      await channel.send({ embeds: [embed] }).catch((err) => console.error('[PluginManager] Failed to send economy log to channel:', err));
-    }
-  }
-}
+const eventBus = require('../../../utils/eventBus');
 
 module.exports = {
   data: new SlashCommandBuilder()
@@ -66,129 +53,185 @@ module.exports = {
       if (!hasPermission) return;
 
       const subcommand = interaction.options.getSubcommand();
-    const targetUser = interaction.options.getUser('user');
-    const reason = interaction.options.getString('reason') || 'No reason provided';
-    const guildId = interaction.guild.id;
-    const moderatorId = interaction.user.id;
+      const targetUser = interaction.options.getUser('user');
+      const reason = interaction.options.getString('reason') || 'No reason provided';
+      const guildId = interaction.guild.id;
+      const moderatorId = interaction.user.id;
 
-    const db = container.resolve('db');
-    const economyService = container.resolve('economy');
+      const db = container.resolve('db');
+      const economyService = container.resolve('economy');
 
-    // Automatically create accounts
-    economyService.createAccount(guildId, targetUser.id);
-    economyService.createAccount(guildId, moderatorId);
+      // Automatically create accounts
+      economyService.createAccount(guildId, targetUser.id);
+      economyService.createAccount(guildId, moderatorId);
 
-    const previousValue = economyService.getBalance(guildId, targetUser.id);
-    let newValue = previousValue;
+      const previousValue = economyService.getBalance(guildId, targetUser.id);
+      let newValue = previousValue;
 
-    if (subcommand === 'add') {
-      const amount = interaction.options.getInteger('amount');
-      newValue = economyService.addCoins(guildId, targetUser.id, amount, 'ADMIN', reason);
+      if (subcommand === 'add') {
+        const amount = interaction.options.getInteger('amount');
+        newValue = economyService.addCoins(guildId, targetUser.id, amount, 'ADMIN', reason);
 
-      // Log to database
-      db.economyLogs.create(guildId, moderatorId, targetUser.id, previousValue, newValue, 'COINS_ADD', reason);
+        // Log to database
+        db.economyLogs.create(guildId, moderatorId, targetUser.id, previousValue, newValue, 'COINS_ADD', reason);
 
-      const embed = new EmbedBuilder()
-        .setColor(0x5865F2)
-        .setTitle('💰 Coins Added')
-        .setDescription(`Successfully added coins to ${targetUser}'s wallet.`)
-        .addFields(
-          { name: '👤 Moderator', value: `<@${moderatorId}>`, inline: true },
-          { name: '🎯 Target', value: `<@${targetUser.id}>`, inline: true },
-          { name: '💵 Amount Added', value: `\`${amount.toLocaleString()} coins\``, inline: true },
-          { name: '📈 Old Balance', value: `\`${previousValue.toLocaleString()} coins\``, inline: true },
-          { name: '📉 New Balance', value: `\`${newValue.toLocaleString()} coins\``, inline: true },
-          { name: '📝 Reason', value: reason }
-        )
-        .setTimestamp();
+        const embed = new EmbedBuilder()
+          .setColor(0x5865F2)
+          .setTitle('💰 Coins Added')
+          .setDescription(`Successfully added coins to ${targetUser}'s wallet.`)
+          .addFields(
+            { name: '👤 Moderator', value: `<@${moderatorId}>`, inline: true },
+            { name: '🎯 Target', value: `<@${targetUser.id}>`, inline: true },
+            { name: '💵 Amount Added', value: `\`${amount.toLocaleString()} coins\``, inline: true },
+            { name: '📈 Old Balance', value: `\`${previousValue.toLocaleString()} coins\``, inline: true },
+            { name: '📉 New Balance', value: `\`${newValue.toLocaleString()} coins\``, inline: true },
+            { name: '📝 Reason', value: reason }
+          )
+          .setTimestamp();
 
-      await sendEconomyLog(interaction.guild, client, embed);
-      return interaction.editReply({ embeds: [embed] });
-    }
-
-    if (subcommand === 'remove') {
-      const amount = interaction.options.getInteger('amount');
-      if (previousValue < amount) {
-        return interaction.editReply({
-          content: `❌ Target user only has **${previousValue.toLocaleString()} coins**. Cannot remove **${amount.toLocaleString()} coins**.`,
-          ephemeral: true
+        eventBus.publish('economyLog', {
+          guildId,
+          type: 'coins_added',
+          userId: targetUser.id,
+          amount,
+          context: { source: 'ADMIN', reason }
         });
+        eventBus.publish('adminLog', {
+          guildId,
+          type: 'admin_economy_command',
+          adminId: moderatorId,
+          targetId: targetUser.id,
+          context: { reward: `Added ${amount} coins. Reason: ${reason}` }
+        });
+
+        return interaction.editReply({ embeds: [embed] });
       }
-      newValue = economyService.removeCoins(guildId, targetUser.id, amount, 'ADMIN', reason);
 
-      // Log to database
-      db.economyLogs.create(guildId, moderatorId, targetUser.id, previousValue, newValue, 'COINS_REMOVE', reason);
+      if (subcommand === 'remove') {
+        const amount = interaction.options.getInteger('amount');
+        if (previousValue < amount) {
+          return interaction.editReply({
+            content: `❌ Target user only has **${previousValue.toLocaleString()} coins**. Cannot remove **${amount.toLocaleString()} coins**.`,
+            ephemeral: true
+          });
+        }
+        newValue = economyService.removeCoins(guildId, targetUser.id, amount, 'ADMIN', reason);
 
-      const embed = new EmbedBuilder()
-        .setColor(0x5865F2)
-        .setTitle('💰 Coins Removed')
-        .setDescription(`Successfully removed coins from ${targetUser}'s wallet.`)
-        .addFields(
-          { name: '👤 Moderator', value: `<@${moderatorId}>`, inline: true },
-          { name: '🎯 Target', value: `<@${targetUser.id}>`, inline: true },
-          { name: '💵 Amount Removed', value: `\`${amount.toLocaleString()} coins\``, inline: true },
-          { name: '📈 Old Balance', value: `\`${previousValue.toLocaleString()} coins\``, inline: true },
-          { name: '📉 New Balance', value: `\`${newValue.toLocaleString()} coins\``, inline: true },
-          { name: '📝 Reason', value: reason }
-        )
-        .setTimestamp();
+        // Log to database
+        db.economyLogs.create(guildId, moderatorId, targetUser.id, previousValue, newValue, 'COINS_REMOVE', reason);
 
-      await sendEconomyLog(interaction.guild, client, embed);
-      return interaction.editReply({ embeds: [embed] });
-    }
+        const embed = new EmbedBuilder()
+          .setColor(0x5865F2)
+          .setTitle('💰 Coins Removed')
+          .setDescription(`Successfully removed coins from ${targetUser}'s wallet.`)
+          .addFields(
+            { name: '👤 Moderator', value: `<@${moderatorId}>`, inline: true },
+            { name: '🎯 Target', value: `<@${targetUser.id}>`, inline: true },
+            { name: '💵 Amount Removed', value: `\`${amount.toLocaleString()} coins\``, inline: true },
+            { name: '📈 Old Balance', value: `\`${previousValue.toLocaleString()} coins\``, inline: true },
+            { name: '📉 New Balance', value: `\`${newValue.toLocaleString()} coins\``, inline: true },
+            { name: '📝 Reason', value: reason }
+          )
+          .setTimestamp();
 
-    if (subcommand === 'set') {
-      const amount = interaction.options.getInteger('amount');
-      newValue = economyService.setCoins(guildId, targetUser.id, amount, 'ADMIN', reason);
+        eventBus.publish('economyLog', {
+          guildId,
+          type: 'coins_removed',
+          userId: targetUser.id,
+          amount,
+          context: { source: 'ADMIN', reason }
+        });
+        eventBus.publish('adminLog', {
+          guildId,
+          type: 'admin_economy_command',
+          adminId: moderatorId,
+          targetId: targetUser.id,
+          context: { reward: `Removed ${amount} coins. Reason: ${reason}` }
+        });
 
-      // Log to database
-      db.economyLogs.create(guildId, moderatorId, targetUser.id, previousValue, newValue, 'COINS_SET', reason);
+        return interaction.editReply({ embeds: [embed] });
+      }
 
-      const embed = new EmbedBuilder()
-        .setColor(0x5865F2)
-        .setTitle('💰 Coins Set')
-        .setDescription(`Successfully set ${targetUser}'s wallet balance.`)
-        .addFields(
-          { name: '👤 Moderator', value: `<@${moderatorId}>`, inline: true },
-          { name: '🎯 Target', value: `<@${targetUser.id}>`, inline: true },
-          { name: '📈 Old Balance', value: `\`${previousValue.toLocaleString()} coins\``, inline: true },
-          { name: '📉 New Balance', value: `\`${newValue.toLocaleString()} coins\``, inline: true },
-          { name: '📝 Reason', value: reason }
-        )
-        .setTimestamp();
+      if (subcommand === 'set') {
+        const amount = interaction.options.getInteger('amount');
+        newValue = economyService.setCoins(guildId, targetUser.id, amount, 'ADMIN', reason);
 
-      await sendEconomyLog(interaction.guild, client, embed);
-      return interaction.editReply({ embeds: [embed] });
-    }
+        // Log to database
+        db.economyLogs.create(guildId, moderatorId, targetUser.id, previousValue, newValue, 'COINS_SET', reason);
 
-    if (subcommand === 'reset') {
-      // Get bank coins for accurate logs
-      const eco = db.economy.get(guildId, targetUser.id);
-      const bankCoins = eco ? eco.bank : 0;
-      
-      newValue = 0;
-      economyService.setCoins(guildId, targetUser.id, 0, 'ADMIN', reason);
-      db.economy.updateBank(guildId, targetUser.id, 0);
+        const embed = new EmbedBuilder()
+          .setColor(0x5865F2)
+          .setTitle('💰 Coins Set')
+          .setDescription(`Successfully set ${targetUser}'s wallet balance.`)
+          .addFields(
+            { name: '👤 Moderator', value: `<@${moderatorId}>`, inline: true },
+            { name: '🎯 Target', value: `<@${targetUser.id}>`, inline: true },
+            { name: '📈 Old Balance', value: `\`${previousValue.toLocaleString()} coins\``, inline: true },
+            { name: '📉 New Balance', value: `\`${newValue.toLocaleString()} coins\``, inline: true },
+            { name: '📝 Reason', value: reason }
+          )
+          .setTimestamp();
 
-      // Log to database (combining wallet + bank previous value)
-      db.economyLogs.create(guildId, moderatorId, targetUser.id, previousValue + bankCoins, 0, 'COINS_RESET', reason);
+        eventBus.publish('economyLog', {
+          guildId,
+          type: 'coins_set',
+          userId: targetUser.id,
+          amount,
+          context: { source: 'ADMIN', reason }
+        });
+        eventBus.publish('adminLog', {
+          guildId,
+          type: 'admin_economy_command',
+          adminId: moderatorId,
+          targetId: targetUser.id,
+          context: { reward: `Set wallet balance to ${amount} coins. Reason: ${reason}` }
+        });
 
-      const embed = new EmbedBuilder()
-        .setColor(0x5865F2)
-        .setTitle('💰 Coins Reset')
-        .setDescription(`Successfully reset all wallet and bank coins for ${targetUser}.`)
-        .addFields(
-          { name: '👤 Moderator', value: `<@${moderatorId}>`, inline: true },
-          { name: '🎯 Target', value: `<@${targetUser.id}>`, inline: true },
-          { name: '📈 Previous Wallet', value: `\`${previousValue.toLocaleString()} coins\``, inline: true },
-          { name: '🏦 Previous Bank', value: `\`${bankCoins.toLocaleString()} coins\``, inline: true },
-          { name: '📝 Reason', value: reason }
-        )
-        .setTimestamp();
+        return interaction.editReply({ embeds: [embed] });
+      }
 
-      await sendEconomyLog(interaction.guild, client, embed);
-      return interaction.editReply({ embeds: [embed] });
-    }
+      if (subcommand === 'reset') {
+        // Get bank coins for accurate logs
+        const eco = db.economy.get(guildId, targetUser.id);
+        const bankCoins = eco ? eco.bank : 0;
+        
+        newValue = 0;
+        economyService.setCoins(guildId, targetUser.id, 0, 'ADMIN', reason);
+        db.economy.updateBank(guildId, targetUser.id, 0);
+
+        // Log to database (combining wallet + bank previous value)
+        db.economyLogs.create(guildId, moderatorId, targetUser.id, previousValue + bankCoins, 0, 'COINS_RESET', reason);
+
+        const embed = new EmbedBuilder()
+          .setColor(0x5865F2)
+          .setTitle('💰 Coins Reset')
+          .setDescription(`Successfully reset all wallet and bank coins for ${targetUser}.`)
+          .addFields(
+            { name: '👤 Moderator', value: `<@${moderatorId}>`, inline: true },
+            { name: '🎯 Target', value: `<@${targetUser.id}>`, inline: true },
+            { name: '📈 Previous Wallet', value: `\`${previousValue.toLocaleString()} coins\``, inline: true },
+            { name: '🏦 Previous Bank', value: `\`${bankCoins.toLocaleString()} coins\``, inline: true },
+            { name: '📝 Reason', value: reason }
+          )
+          .setTimestamp();
+
+        eventBus.publish('economyLog', {
+          guildId,
+          type: 'coins_reset',
+          userId: targetUser.id,
+          amount: 0,
+          context: { source: 'ADMIN', reason }
+        });
+        eventBus.publish('adminLog', {
+          guildId,
+          type: 'admin_economy_command',
+          adminId: moderatorId,
+          targetId: targetUser.id,
+          context: { reward: `Reset wallet and bank balances to 0. Reason: ${reason}` }
+        });
+
+        return interaction.editReply({ embeds: [embed] });
+      }
     } catch (error) {
       console.error(error);
       try {
