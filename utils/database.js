@@ -197,7 +197,101 @@ class SqlJsWrapper {
       CREATE INDEX IF NOT EXISTS idx_warnings_timestamp ON warnings(timestamp);
       CREATE INDEX IF NOT EXISTS idx_moderation_logs_guild ON moderation_logs(guild_id);
       CREATE INDEX IF NOT EXISTS idx_guild_cards ON guild_cards(guild_id);
+
+      CREATE TABLE IF NOT EXISTS users (
+        guild_id TEXT NOT NULL,
+        user_id TEXT NOT NULL,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        PRIMARY KEY (guild_id, user_id),
+        FOREIGN KEY (guild_id) REFERENCES guild_configs(guild_id) ON DELETE CASCADE
+      );
+
+      CREATE TABLE IF NOT EXISTS economy (
+        guild_id TEXT NOT NULL,
+        user_id TEXT NOT NULL,
+        coins INTEGER DEFAULT 0,
+        bank INTEGER DEFAULT 0,
+        last_daily TEXT DEFAULT NULL,
+        current_streak INTEGER DEFAULT 0,
+        highest_streak INTEGER DEFAULT 0,
+        updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        PRIMARY KEY (guild_id, user_id),
+        FOREIGN KEY (guild_id, user_id) REFERENCES users(guild_id, user_id) ON DELETE CASCADE
+      );
+
+      CREATE TABLE IF NOT EXISTS levels (
+        guild_id TEXT NOT NULL,
+        user_id TEXT NOT NULL,
+        xp INTEGER DEFAULT 0,
+        level INTEGER DEFAULT 1,
+        updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        PRIMARY KEY (guild_id, user_id),
+        FOREIGN KEY (guild_id, user_id) REFERENCES users(guild_id, user_id) ON DELETE CASCADE
+      );
+
+      CREATE TABLE IF NOT EXISTS inventory (
+        guild_id TEXT NOT NULL,
+        user_id TEXT NOT NULL,
+        item_id TEXT NOT NULL,
+        quantity INTEGER DEFAULT 1,
+        updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        PRIMARY KEY (guild_id, user_id, item_id),
+        FOREIGN KEY (guild_id, user_id) REFERENCES users(guild_id, user_id) ON DELETE CASCADE
+      );
+
+      CREATE TABLE IF NOT EXISTS achievements (
+        guild_id TEXT NOT NULL,
+        user_id TEXT NOT NULL,
+        achievement_id TEXT NOT NULL,
+        unlocked_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        PRIMARY KEY (guild_id, user_id, achievement_id),
+        FOREIGN KEY (guild_id, user_id) REFERENCES users(guild_id, user_id) ON DELETE CASCADE
+      );
+
+      CREATE INDEX IF NOT EXISTS idx_users ON users(guild_id, user_id);
+      CREATE INDEX IF NOT EXISTS idx_economy ON economy(guild_id, user_id);
+      CREATE INDEX IF NOT EXISTS idx_levels ON levels(guild_id, user_id);
+      CREATE INDEX IF NOT EXISTS idx_inventory ON inventory(guild_id, user_id);
+      CREATE INDEX IF NOT EXISTS idx_achievements ON achievements(guild_id, user_id);
+
+      CREATE TABLE IF NOT EXISTS economy_transactions (
+        id TEXT PRIMARY KEY NOT NULL,
+        guild_id TEXT NOT NULL,
+        user_id TEXT NOT NULL,
+        amount INTEGER NOT NULL,
+        balance_before INTEGER NOT NULL,
+        balance_after INTEGER NOT NULL,
+        transaction_type TEXT NOT NULL,
+        source TEXT NOT NULL,
+        reason TEXT DEFAULT NULL,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (guild_id, user_id) REFERENCES users(guild_id, user_id) ON DELETE CASCADE
+      );
+
+      CREATE INDEX IF NOT EXISTS idx_economy_transactions_guild_user ON economy_transactions(guild_id, user_id);
+      CREATE INDEX IF NOT EXISTS idx_economy_transactions_created_at ON economy_transactions(created_at);
+
+      CREATE TABLE IF NOT EXISTS level_role_rewards (
+        guild_id TEXT NOT NULL,
+        level INTEGER NOT NULL,
+        role_id TEXT NOT NULL,
+        PRIMARY KEY (guild_id, level),
+        FOREIGN KEY (guild_id) REFERENCES guild_configs(guild_id) ON DELETE CASCADE
+      );
+
+      CREATE INDEX IF NOT EXISTS idx_level_role_rewards ON level_role_rewards(guild_id, level);
     `);
+
+    // Upgrade existing database if columns are missing
+    try {
+      this.db.exec('ALTER TABLE economy ADD COLUMN last_daily TEXT DEFAULT NULL');
+    } catch (e) {}
+    try {
+      this.db.exec('ALTER TABLE economy ADD COLUMN current_streak INTEGER DEFAULT 0');
+    } catch (e) {}
+    try {
+      this.db.exec('ALTER TABLE economy ADD COLUMN highest_streak INTEGER DEFAULT 0');
+    } catch (e) {}
   }
 
   exec(sql) {
@@ -549,11 +643,276 @@ class GuildCardRepository {
   }
 }
 
+class UserRepository {
+  constructor(db, configs) {
+    this.db = db;
+    this.configs = configs;
+    this.selectStmt = db.prepare('SELECT * FROM users WHERE guild_id = ? AND user_id = ?');
+    this.insertStmt = db.prepare('INSERT OR IGNORE INTO users (guild_id, user_id) VALUES (?, ?)');
+  }
+
+  get(guildId, userId) {
+    this.configs.get(guildId); // Ensure config exists
+    this.insertStmt.run(guildId, userId);
+    return this.selectStmt.get(guildId, userId);
+  }
+
+  create(guildId, userId) {
+    this.configs.get(guildId); // Ensure config exists
+    this.insertStmt.run(guildId, userId);
+    return this.selectStmt.get(guildId, userId);
+  }
+}
+
+class EconomyRepository {
+  constructor(db, users) {
+    this.db = db;
+    this.users = users;
+    this.selectStmt = db.prepare('SELECT * FROM economy WHERE guild_id = ? AND user_id = ?');
+    this.insertStmt = db.prepare('INSERT OR IGNORE INTO economy (guild_id, user_id) VALUES (?, ?)');
+    this.updateCoinsStmt = db.prepare('UPDATE economy SET coins = ?, updated_at = CURRENT_TIMESTAMP WHERE guild_id = ? AND user_id = ?');
+    this.updateBankStmt = db.prepare('UPDATE economy SET bank = ?, updated_at = CURRENT_TIMESTAMP WHERE guild_id = ? AND user_id = ?');
+    this.updateDailyStmt = db.prepare('UPDATE economy SET last_daily = ?, current_streak = ?, highest_streak = ?, updated_at = CURRENT_TIMESTAMP WHERE guild_id = ? AND user_id = ?');
+  }
+
+  get(guildId, userId) {
+    this.users.get(guildId, userId); // Ensure user exists
+    this.insertStmt.run(guildId, userId);
+    return this.selectStmt.get(guildId, userId);
+  }
+
+  updateCoins(guildId, userId, coins) {
+    this.get(guildId, userId); // Ensure economy record exists
+    this.updateCoinsStmt.run(coins, guildId, userId);
+    return this.get(guildId, userId);
+  }
+
+  updateBank(guildId, userId, bank) {
+    this.get(guildId, userId); // Ensure economy record exists
+    this.updateBankStmt.run(bank, guildId, userId);
+    return this.get(guildId, userId);
+  }
+
+  updateDaily(guildId, userId, lastDaily, currentStreak, highestStreak) {
+    this.get(guildId, userId); // Ensure economy record exists
+    this.updateDailyStmt.run(lastDaily, currentStreak, highestStreak, guildId, userId);
+    return this.get(guildId, userId);
+  }
+}
+
+class LevelRepository {
+  constructor(db, users) {
+    this.db = db;
+    this.users = users;
+    this.selectStmt = db.prepare('SELECT * FROM levels WHERE guild_id = ? AND user_id = ?');
+    this.insertStmt = db.prepare('INSERT OR IGNORE INTO levels (guild_id, user_id) VALUES (?, ?)');
+    this.updateXpStmt = db.prepare('UPDATE levels SET xp = ?, level = ?, updated_at = CURRENT_TIMESTAMP WHERE guild_id = ? AND user_id = ?');
+    this.getRankStmt = db.prepare('SELECT user_id FROM levels WHERE guild_id = ? ORDER BY xp DESC');
+  }
+
+  get(guildId, userId) {
+    this.users.get(guildId, userId); // Ensure user exists
+    this.insertStmt.run(guildId, userId);
+    return this.selectStmt.get(guildId, userId);
+  }
+
+  updateXp(guildId, userId, xp, level) {
+    this.get(guildId, userId); // Ensure level record exists
+    this.updateXpStmt.run(xp, level, guildId, userId);
+    return this.get(guildId, userId);
+  }
+
+  getRank(guildId, userId) {
+    this.get(guildId, userId); // Ensure level record exists
+    const rows = this.getRankStmt.all(guildId);
+    const index = rows.findIndex(r => r.user_id === userId);
+    return index === -1 ? 1 : index + 1;
+  }
+}
+
+class InventoryRepository {
+  constructor(db, users) {
+    this.db = db;
+    this.users = users;
+    this.selectStmt = db.prepare('SELECT * FROM inventory WHERE guild_id = ? AND user_id = ?');
+    this.selectItemStmt = db.prepare('SELECT * FROM inventory WHERE guild_id = ? AND user_id = ? AND item_id = ?');
+    this.insertStmt = db.prepare('INSERT OR IGNORE INTO inventory (guild_id, user_id, item_id, quantity) VALUES (?, ?, ?, 0)');
+    this.updateQtyStmt = db.prepare('UPDATE inventory SET quantity = ?, updated_at = CURRENT_TIMESTAMP WHERE guild_id = ? AND user_id = ? AND item_id = ?');
+    this.deleteItemStmt = db.prepare('DELETE FROM inventory WHERE guild_id = ? AND user_id = ? AND item_id = ?');
+  }
+
+  get(guildId, userId) {
+    this.users.get(guildId, userId); // Ensure user exists
+    return this.selectStmt.all(guildId, userId);
+  }
+
+  getItem(guildId, userId, itemId) {
+    this.users.get(guildId, userId); // Ensure user exists
+    return this.selectItemStmt.get(guildId, userId, itemId);
+  }
+
+  addItem(guildId, userId, itemId, quantity) {
+    this.users.get(guildId, userId); // Ensure user exists
+    this.insertStmt.run(guildId, userId, itemId);
+    const currentItem = this.getItem(guildId, userId, itemId);
+    const newQty = (currentItem ? currentItem.quantity : 0) + quantity;
+    this.updateQtyStmt.run(newQty, guildId, userId, itemId);
+    return this.getItem(guildId, userId, itemId);
+  }
+
+  removeItem(guildId, userId, itemId, quantity) {
+    this.users.get(guildId, userId); // Ensure user exists
+    const currentItem = this.getItem(guildId, userId, itemId);
+    if (!currentItem) return null;
+    const newQty = Math.max(0, currentItem.quantity - quantity);
+    if (newQty === 0) {
+      this.deleteItemStmt.run(guildId, userId, itemId);
+      return null;
+    } else {
+      this.updateQtyStmt.run(newQty, guildId, userId, itemId);
+      return this.getItem(guildId, userId, itemId);
+    }
+  }
+}
+
+class AchievementRepository {
+  constructor(db, users) {
+    this.db = db;
+    this.users = users;
+    this.selectStmt = db.prepare('SELECT * FROM achievements WHERE guild_id = ? AND user_id = ?');
+    this.insertStmt = db.prepare('INSERT OR IGNORE INTO achievements (guild_id, user_id, achievement_id) VALUES (?, ?, ?)');
+    this.hasAchievementStmt = db.prepare('SELECT 1 FROM achievements WHERE guild_id = ? AND user_id = ? AND achievement_id = ?');
+  }
+
+  get(guildId, userId) {
+    this.users.get(guildId, userId); // Ensure user exists
+    return this.selectStmt.all(guildId, userId).map(r => r.achievement_id);
+  }
+
+  add(guildId, userId, achievementId) {
+    this.users.get(guildId, userId); // Ensure user exists
+    this.insertStmt.run(guildId, userId, achievementId);
+    return this.get(guildId, userId);
+  }
+
+  has(guildId, userId, achievementId) {
+    this.users.get(guildId, userId); // Ensure user exists
+    return !!this.hasAchievementStmt.get(guildId, userId, achievementId);
+  }
+}
+
+class TransactionRepository {
+  constructor(db, users) {
+    this.db = db;
+    this.users = users;
+    this.insertStmt = db.prepare(`
+      INSERT INTO economy_transactions (id, guild_id, user_id, amount, balance_before, balance_after, transaction_type, source, reason, created_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `);
+    this.selectUserStmt = db.prepare(`
+      SELECT * FROM economy_transactions
+      WHERE guild_id = ? AND user_id = ?
+      ORDER BY created_at DESC, id DESC
+      LIMIT ?
+    `);
+    this.selectGuildStmt = db.prepare(`
+      SELECT * FROM economy_transactions
+      WHERE guild_id = ?
+      ORDER BY created_at DESC, id DESC
+      LIMIT ?
+    `);
+    this.selectLatestStmt = db.prepare(`
+      SELECT * FROM economy_transactions
+      WHERE guild_id = ? AND user_id = ?
+      ORDER BY created_at DESC, id DESC
+      LIMIT 1
+    `);
+  }
+
+  create(guildId, userId, amount, before, after, type, source, reason) {
+    this.users.get(guildId, userId); // Ensure user exists
+    const id = Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
+    const createdAt = new Date().toISOString();
+    this.insertStmt.run(id, guildId, userId, amount, before, after, type, source, reason || null, createdAt);
+    return {
+      id,
+      guildId,
+      userId,
+      amount,
+      balanceBefore: before,
+      balanceAfter: after,
+      transactionType: type,
+      source,
+      reason,
+      createdAt
+    };
+  }
+
+  listUserTransactions(guildId, userId, limit = 20) {
+    this.users.get(guildId, userId); // Ensure user exists
+    return this.selectUserStmt.all(guildId, userId, limit);
+  }
+
+  listGuildTransactions(guildId, limit = 50) {
+    this.users.configs.get(guildId); // Ensure guild configs exists
+    return this.selectGuildStmt.all(guildId, limit);
+  }
+
+  getLatest(guildId, userId) {
+    this.users.get(guildId, userId); // Ensure user exists
+    return this.selectLatestStmt.get(guildId, userId);
+  }
+}
+
+class RoleRewardRepository {
+  constructor(db, configs) {
+    this.db = db;
+    this.configs = configs;
+    this.insertStmt = db.prepare(`
+      INSERT INTO level_role_rewards (guild_id, level, role_id)
+      VALUES (?, ?, ?)
+      ON CONFLICT(guild_id, level) DO UPDATE SET role_id = excluded.role_id
+    `);
+    this.selectStmt = db.prepare('SELECT * FROM level_role_rewards WHERE guild_id = ? AND level = ?');
+    this.selectAllStmt = db.prepare('SELECT * FROM level_role_rewards WHERE guild_id = ? ORDER BY level ASC');
+    this.deleteStmt = db.prepare('DELETE FROM level_role_rewards WHERE guild_id = ? AND level = ?');
+  }
+
+  add(guildId, level, roleId) {
+    this.configs.get(guildId); // Ensure guild config exists
+    this.insertStmt.run(guildId, level, roleId);
+    return this.get(guildId, level);
+  }
+
+  get(guildId, level) {
+    this.configs.get(guildId); // Ensure guild config exists
+    return this.selectStmt.get(guildId, level);
+  }
+
+  getAll(guildId) {
+    this.configs.get(guildId); // Ensure guild config exists
+    return this.selectAllStmt.all(guildId);
+  }
+
+  remove(guildId, level) {
+    this.configs.get(guildId); // Ensure guild config exists
+    this.deleteStmt.run(guildId, level);
+  }
+}
+
 const configs = new GuildConfigRepository(sqlite);
 const warnings = new WarningRepository(sqlite, configs);
 const plugins = new GuildPluginRepository(sqlite, configs);
 const logs = new ModerationLogRepository(sqlite, configs);
 const cards = new GuildCardRepository(sqlite, configs);
+
+const users = new UserRepository(sqlite, configs);
+const economy = new EconomyRepository(sqlite, users);
+const levels = new LevelRepository(sqlite, users);
+const inventory = new InventoryRepository(sqlite, users);
+const achievements = new AchievementRepository(sqlite, users);
+const transactions = new TransactionRepository(sqlite, users);
+const roleRewards = new RoleRewardRepository(sqlite, configs);
 
 module.exports = {
   sqlite,
@@ -562,6 +921,13 @@ module.exports = {
   plugins,
   logs,
   cards,
+  users,
+  economy,
+  levels,
+  inventory,
+  achievements,
+  transactions,
+  roleRewards,
   init: () => sqlite.init(),
   // Backward compatibility layers
   ensureDataFiles: () => {}, // Schema is generated on module instantiation

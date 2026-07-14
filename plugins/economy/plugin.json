@@ -1,0 +1,6 @@
+{
+  "name": "economy",
+  "version": "1.0.0",
+  "description": "Economy system, leveling, inventory, and achievements for users.",
+  "enabledByDefault": true
+}

@@ -308,6 +308,187 @@ class ImageService {
     ctx.textBaseline = 'middle';
     ctx.fillText(text, pillX + pillW/2, pillY + pillH/2);
   }
+
+  /**
+   * Generates a professional gaming-style PNG profile card.
+   * @param {import('discord.js').User} user
+   * @param {import('discord.js').Guild} guild
+   * @param {object} profileData
+   */
+  async generateProfileCard(user, guild, profileData) {
+    const width = 800;
+    const height = 400;
+    const canvas = createCanvas(width, height);
+    const ctx = canvas.getContext('2d');
+
+    const fontStack = '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif';
+
+    // 1. Draw Gaming/Cyberpunk dark purple gradient background
+    const bgGrad = ctx.createLinearGradient(0, 0, width, height);
+    bgGrad.addColorStop(0, '#120C1F'); // Deep violet
+    bgGrad.addColorStop(1, '#08080C'); // Cyber black
+    ctx.fillStyle = bgGrad;
+    ctx.fillRect(0, 0, width, height);
+
+    // Decorative neon shapes/grid pattern for gaming aesthetic
+    ctx.strokeStyle = 'rgba(0, 240, 255, 0.04)';
+    ctx.lineWidth = 1;
+    for (let x = 0; x < width; x += 40) {
+      ctx.beginPath();
+      ctx.moveTo(x, 0);
+      ctx.lineTo(x, height);
+      ctx.stroke();
+    }
+    for (let y = 0; y < height; y += 40) {
+      ctx.beginPath();
+      ctx.moveTo(0, y);
+      ctx.lineTo(width, y);
+      ctx.stroke();
+    }
+
+    // 2. Draw Left Glassmorphic Panel (Avatar & User Info)
+    ctx.fillStyle = 'rgba(0, 0, 0, 0.25)';
+    ctx.strokeStyle = 'rgba(255, 255, 255, 0.05)';
+    ctx.lineWidth = 1.5;
+    ctx.beginPath();
+    ctx.roundRect(25, 25, 185, 350, 15);
+    ctx.fill();
+    ctx.stroke();
+
+    // 3. Draw Right Glassmorphic Panel (Stats Grid)
+    ctx.fillStyle = 'rgba(0, 0, 0, 0.4)';
+    ctx.strokeStyle = 'rgba(255, 255, 255, 0.08)';
+    ctx.beginPath();
+    ctx.roundRect(230, 25, 545, 350, 15);
+    ctx.fill();
+    ctx.stroke();
+
+    // 4. Draw User Avatar inside Left Panel
+    const avatarX = 117;
+    const avatarY = 100;
+    const radius = 55;
+
+    // Glowing avatar outer ring (neon cyan)
+    ctx.save();
+    ctx.shadowColor = '#00F0FF';
+    ctx.shadowBlur = 12;
+    ctx.strokeStyle = '#00F0FF';
+    ctx.lineWidth = 3;
+    ctx.beginPath();
+    ctx.arc(avatarX, avatarY, radius + 3, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.restore();
+
+    // Draw circular user avatar
+    ctx.save();
+    ctx.beginPath();
+    ctx.arc(avatarX, avatarY, radius, 0, Math.PI * 2);
+    ctx.clip();
+    try {
+      const avatarUrl = user.displayAvatarURL({ extension: 'png', size: 256 });
+      const avatarImg = await loadImage(avatarUrl);
+      ctx.drawImage(avatarImg, avatarX - radius, avatarY - radius, radius * 2, radius * 2);
+    } catch {
+      ctx.fillStyle = '#4F545C';
+      ctx.fillRect(avatarX - radius, avatarY - radius, radius * 2, radius * 2);
+      ctx.fillStyle = '#FFFFFF';
+      ctx.font = `bold 40px ${fontStack}`;
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      const initial = user.username ? user.username.charAt(0).toUpperCase() : '?';
+      ctx.fillText(initial, avatarX, avatarY);
+    }
+    ctx.restore();
+
+    // 5. Draw User Name & Tag
+    ctx.fillStyle = '#FFFFFF';
+    ctx.font = `bold 18px ${fontStack}`;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'top';
+    const displayName = user.displayName || user.username;
+    const truncatedDispName = displayName.length > 14 ? displayName.slice(0, 12) + '...' : displayName;
+    ctx.fillText(truncatedDispName, avatarX, 175);
+
+    ctx.fillStyle = '#8E9297';
+    ctx.font = `13px ${fontStack}`;
+    const truncatedUsername = user.username.length > 16 ? user.username.slice(0, 14) + '...' : user.username;
+    ctx.fillText(`@${truncatedUsername}`, avatarX, 200);
+
+    // Muted Server Name in Left Panel footer
+    ctx.fillStyle = '#5A5D64';
+    ctx.font = `bold 11px ${fontStack}`;
+    const truncatedServerName = guild.name.length > 20 ? guild.name.slice(0, 18) + '...' : guild.name;
+    ctx.fillText(truncatedServerName.toUpperCase(), avatarX, 335);
+
+    // 6. Draw Stats inside Right Panel
+    ctx.textAlign = 'left';
+    ctx.textBaseline = 'top';
+    ctx.fillStyle = '#00F0FF';
+    ctx.font = `bold 14px ${fontStack}`;
+    ctx.fillText('PROFILE STATUS', 260, 50);
+
+    const drawStat = (label, value, x, y) => {
+      ctx.fillStyle = '#8E9297';
+      ctx.font = `13px ${fontStack}`;
+      ctx.fillText(label, x, y);
+      ctx.fillStyle = '#FFFFFF';
+      ctx.font = `bold 18px ${fontStack}`;
+      ctx.fillText(value, x, y + 22);
+    };
+
+    // Row 1 (y=95)
+    drawStat('💰 Wallet', `${profileData.wallet.toLocaleString()} coins`, 260, 95);
+    drawStat('🏦 Bank', `${profileData.bank.toLocaleString()} coins`, 520, 95);
+
+    // Row 2 (y=170)
+    drawStat('⭐ Level', `Level ${profileData.level}`, 260, 170);
+    drawStat('✨ XP', `${profileData.xp.toLocaleString()} / ${profileData.requiredXp.toLocaleString()} XP`, 520, 170);
+
+    // Row 3 (y=245)
+    drawStat('🔥 Daily Streak', `${profileData.streak} days`, 260, 245);
+    drawStat('🏆 Server Rank', `#${profileData.rank}`, 520, 245);
+
+    // 7. Draw XP Progress Bar
+    const barX = 260;
+    const barY = 325;
+    const barW = 485;
+    const barH = 20;
+
+    // Track
+    ctx.fillStyle = 'rgba(255, 255, 255, 0.08)';
+    ctx.beginPath();
+    ctx.roundRect(barX, barY, barW, barH, 10);
+    ctx.fill();
+
+    // Progress bar fill (gradient)
+    const fillRatio = Math.min(Math.max(profileData.progress, 0), 1);
+    const fillWidth = Math.max(20, barW * fillRatio); // Minsize 20px so rounded corners work nicely
+
+    const barGrad = ctx.createLinearGradient(barX, barY, barX + barW, barY);
+    barGrad.addColorStop(0, '#00F0FF'); // Cyan
+    barGrad.addColorStop(1, '#9A00FF'); // Neon Purple
+    ctx.fillStyle = barGrad;
+    ctx.beginPath();
+    ctx.roundRect(barX, barY, fillWidth, barH, 10);
+    ctx.fill();
+
+    // Progress text centered
+    ctx.fillStyle = '#FFFFFF';
+    ctx.font = `bold 11px ${fontStack}`;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(`${Math.round(fillRatio * 100)}% to next level`, barX + barW / 2, barY + barH / 2);
+
+    // 8. Output PNG Buffer with rounded corners for the whole card
+    const roundedCanvas = createCanvas(width, height);
+    const rCtx = roundedCanvas.getContext('2d');
+    rCtx.beginPath();
+    rCtx.roundRect(0, 0, width, height, 16);
+    rCtx.clip();
+    rCtx.drawImage(canvas, 0, 0);
+
+    return roundedCanvas.toBuffer('image/png');
+  }
 }
 
 module.exports = new ImageService();
