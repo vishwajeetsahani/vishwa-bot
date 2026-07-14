@@ -146,6 +146,9 @@ class SqlJsWrapper {
         auto_role_id TEXT DEFAULT NULL,
         spam_threshold INTEGER DEFAULT 5,
         spam_interval INTEGER DEFAULT 5000,
+        community_channel_id TEXT DEFAULT NULL,
+        economy_log_channel_id TEXT DEFAULT NULL,
+        economy_manager_role_id TEXT DEFAULT NULL,
         updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
       );
 
@@ -280,6 +283,21 @@ class SqlJsWrapper {
       );
 
       CREATE INDEX IF NOT EXISTS idx_level_role_rewards ON level_role_rewards(guild_id, level);
+
+      CREATE TABLE IF NOT EXISTS economy_logs (
+        log_id TEXT PRIMARY KEY NOT NULL,
+        guild_id TEXT NOT NULL,
+        moderator_id TEXT NOT NULL,
+        target_id TEXT NOT NULL,
+        previous_value INTEGER NOT NULL,
+        new_value INTEGER NOT NULL,
+        action TEXT NOT NULL,
+        reason TEXT DEFAULT NULL,
+        timestamp DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (guild_id) REFERENCES guild_configs(guild_id) ON DELETE CASCADE
+      );
+
+      CREATE INDEX IF NOT EXISTS idx_economy_logs_guild ON economy_logs(guild_id);
     `);
 
     // Upgrade existing database if columns are missing
@@ -291,6 +309,15 @@ class SqlJsWrapper {
     } catch (e) {}
     try {
       this.db.exec('ALTER TABLE economy ADD COLUMN highest_streak INTEGER DEFAULT 0');
+    } catch (e) {}
+    try {
+      this.db.exec('ALTER TABLE guild_configs ADD COLUMN community_channel_id TEXT DEFAULT NULL');
+    } catch (e) {}
+    try {
+      this.db.exec('ALTER TABLE guild_configs ADD COLUMN economy_log_channel_id TEXT DEFAULT NULL');
+    } catch (e) {}
+    try {
+      this.db.exec('ALTER TABLE guild_configs ADD COLUMN economy_manager_role_id TEXT DEFAULT NULL');
     } catch (e) {}
   }
 
@@ -377,6 +404,9 @@ class GuildConfigRepository {
     this.updateLogChannel = db.prepare('UPDATE guild_configs SET log_channel_id = ? WHERE guild_id = ?');
     this.updateAutoRole = db.prepare('UPDATE guild_configs SET auto_role_id = ? WHERE guild_id = ?');
     this.updateSpamSettings = db.prepare('UPDATE guild_configs SET spam_threshold = ?, spam_interval = ? WHERE guild_id = ?');
+    this.updateCommunityChannel = db.prepare('UPDATE guild_configs SET community_channel_id = ? WHERE guild_id = ?');
+    this.updateEconomyLogChannel = db.prepare('UPDATE guild_configs SET economy_log_channel_id = ? WHERE guild_id = ?');
+    this.updateEconomyManagerRole = db.prepare('UPDATE guild_configs SET economy_manager_role_id = ? WHERE guild_id = ?');
   }
 
   /**
@@ -410,6 +440,9 @@ class GuildConfigRepository {
       if (updates.goodbyeMessage !== undefined) this.updateGoodbyeMessage.run(updates.goodbyeMessage, guildId);
       if (updates.logChannel !== undefined) this.updateLogChannel.run(updates.logChannel, guildId);
       if (updates.autoRole !== undefined) this.updateAutoRole.run(updates.autoRole, guildId);
+      if (updates.communityChannel !== undefined) this.updateCommunityChannel.run(updates.communityChannel, guildId);
+      if (updates.economyLogChannel !== undefined) this.updateEconomyLogChannel.run(updates.economyLogChannel, guildId);
+      if (updates.economyManagerRole !== undefined) this.updateEconomyManagerRole.run(updates.economyManagerRole, guildId);
       
       if (updates.spamThreshold !== undefined || updates.spamInterval !== undefined) {
         const current = this.get(guildId);
@@ -437,7 +470,10 @@ class GuildConfigRepository {
       logChannel: row.log_channel_id,
       autoRole: row.auto_role_id,
       spamThreshold: row.spam_threshold,
-      spamInterval: row.spam_interval
+      spamInterval: row.spam_interval,
+      communityChannel: row.community_channel_id,
+      economyLogChannel: row.economy_log_channel_id,
+      economyManagerRole: row.economy_manager_role_id
     };
   }
 }
@@ -900,6 +936,43 @@ class RoleRewardRepository {
   }
 }
 
+class EconomyLogRepository {
+  constructor(db, configs) {
+    this.db = db;
+    this.configs = configs;
+    this.insertStmt = db.prepare(`
+      INSERT INTO economy_logs (log_id, guild_id, moderator_id, target_id, previous_value, new_value, action, reason, timestamp)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `);
+    this.selectStmt = db.prepare(`
+      SELECT * FROM economy_logs WHERE guild_id = ? ORDER BY timestamp DESC
+    `);
+  }
+
+  create(guildId, moderatorId, targetId, previousValue, newValue, action, reason) {
+    this.configs.get(guildId); // Ensure config exists
+    const logId = Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
+    const timestamp = new Date().toISOString();
+    this.insertStmt.run(logId, guildId, moderatorId, targetId, previousValue, newValue, action, reason || null, timestamp);
+    return {
+      logId,
+      guildId,
+      moderatorId,
+      targetId,
+      previousValue,
+      newValue,
+      action,
+      reason,
+      timestamp
+    };
+  }
+
+  list(guildId) {
+    this.configs.get(guildId);
+    return this.selectStmt.all(guildId);
+  }
+}
+
 const configs = new GuildConfigRepository(sqlite);
 const warnings = new WarningRepository(sqlite, configs);
 const plugins = new GuildPluginRepository(sqlite, configs);
@@ -913,6 +986,7 @@ const inventory = new InventoryRepository(sqlite, users);
 const achievements = new AchievementRepository(sqlite, users);
 const transactions = new TransactionRepository(sqlite, users);
 const roleRewards = new RoleRewardRepository(sqlite, configs);
+const economyLogs = new EconomyLogRepository(sqlite, configs);
 
 module.exports = {
   sqlite,
@@ -928,6 +1002,7 @@ module.exports = {
   achievements,
   transactions,
   roleRewards,
+  economyLogs,
   init: () => sqlite.init(),
   // Backward compatibility layers
   ensureDataFiles: () => {}, // Schema is generated on module instantiation

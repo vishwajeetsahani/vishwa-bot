@@ -1,0 +1,6 @@
+{
+  "name": "economy-admin",
+  "version": "1.0.0",
+  "description": "Administrative controls and configuration for the economy and level system.",
+  "enabledByDefault": true
+}

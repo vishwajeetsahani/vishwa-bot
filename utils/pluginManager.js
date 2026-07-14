@@ -111,6 +111,7 @@ function loadPlugins(client) {
     if (fs.existsSync(commandsPath)) {
       const commandFiles = getJsFiles(commandsPath);
       for (const file of commandFiles) {
+        console.log(`[PluginManager] Discovered command file: ${path.basename(file)}`);
         try {
           const command = require(file);
           if (!command.data || !command.data.name || typeof command.execute !== 'function') {
@@ -120,6 +121,7 @@ function loadPlugins(client) {
           
           command.plugin = config.name; // Tag command with owning plugin
           client.commands.set(command.data.name, command);
+          console.log(`[PluginManager] Registered command: /${command.data.name} from plugin ${config.name}`);
         } catch (err) {
           if (container.has('errors')) {
             container.resolve('errors').log(err, `plugin_load_command:${file}`);
