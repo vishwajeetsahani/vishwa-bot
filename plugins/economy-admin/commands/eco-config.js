@@ -51,17 +51,17 @@ module.exports = {
 
     if (subcommand === 'community') {
       const channel = interaction.options.getChannel('channel');
-      console.log(`[TRACE_CMD] Option channel ID received from Discord: ${channel.id}`);
+      console.log(`TRACE_CMD: Option channel ID received from Discord: ${channel.id}`);
       
       const updateObj = {
         communityChannel: channel.id,
         announcementChannel: channel.id
       };
       
-      console.log(`Guild ID: ${guildId}`);
-      console.log(`Update object:`, updateObj);
-      console.log(`Property name: communityChannel, announcementChannel`);
-      console.log(`Channel ID: ${channel.id}`);
+      console.log(`TRACE_CMD: Guild ID: ${guildId}`);
+      console.log(`TRACE_CMD: Update object:`, updateObj);
+      console.log(`TRACE_CMD: Property name: communityChannel, announcementChannel`);
+      console.log(`TRACE_CMD: Channel ID: ${channel.id}`);
       
       db.configs.update(guildId, updateObj);
 
@@ -74,6 +74,10 @@ module.exports = {
       }
       stmt.free();
       console.log(rawRow);
+
+      const config = await db.configs.get(interaction.guild.id);
+      console.log('Loaded config:', config);
+      console.log(config);
 
       const eventBus = require('../../../utils/eventBus');
       eventBus.publish('adminLog', {
