@@ -1,0 +1,6 @@
+{
+  "name": "moderation",
+  "version": "2.0.0",
+  "description": "Core moderation utilities (kick, ban, warn, clear, timeout) and AutoMod systems (anti-link, anti-invite, anti-spam).",
+  "enabledByDefault": true
+}

@@ -1,0 +1,31 @@
+{
+  "name": "vishwa-bot",
+  "version": "1.0.0",
+  "description": "Vishwa Bot - A professional Discord.js v14 moderation bot",
+  "main": "index.js",
+  "type": "commonjs",
+  "scripts": {
+    "start": "node index.js",
+    "dev": "nodemon index.js"
+  },
+  "keywords": [
+    "discord",
+    "bot",
+    "moderation",
+    "discord.js"
+  ],
+  "author": "Vishwa Bot",
+  "license": "MIT",
+  "dependencies": {
+    "@napi-rs/canvas": "^1.0.2",
+    "discord.js": "^14.14.1",
+    "dotenv": "^16.4.5",
+    "sql.js": "^1.14.1"
+  },
+  "devDependencies": {
+    "nodemon": "^3.1.0"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}

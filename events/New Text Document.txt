@@ -1,0 +1,58 @@
+/**
+ * interactionCreate.js
+ * -----------------------------------------------------------------------
+ * Event handler for when a user runs a slash command.
+ * -----------------------------------------------------------------------
+ */
+
+const { bypassesAutomod } = require('../utils/permissions');
+const container = require('../utils/container');
+
+module.exports = {
+  name: 'interactionCreate',
+  /**
+   * @param {import('discord.js').Interaction} interaction
+   * @param {import('discord.js').Client} client
+   */
+  async execute(interaction, client) {
+    if (!interaction.isChatInputCommand()) return;
+
+    const command = client.commands.get(interaction.commandName);
+
+    if (!command) {
+      console.error(`[InteractionCreate] No command matching ${interaction.commandName} was found.`);
+      return;
+    }
+
+    try {
+      // Enforce moderator-only restriction where applicable
+      if (command.modOnly && !bypassesAutomod(interaction.member)) {
+        await interaction.reply({
+          content: '🚫 You do not have permission to use this command. (Requires Manage Messages or higher.)',
+          ephemeral: true
+        });
+        return;
+      }
+
+      // Execute the command
+      const startTime = Date.now();
+      await command.execute(interaction, client);
+      const duration = Date.now() - startTime;
+      if (container.has('metrics')) {
+        container.resolve('metrics').trackCommand(interaction.commandName, duration);
+      }
+    } catch (error) {
+      if (container.has('errors')) {
+        container.resolve('errors').log(error, `command:${interaction.commandName}`);
+      } else {
+        console.error(`[InteractionCreate] Error executing ${interaction.commandName}:`, error);
+      }
+
+      if (interaction.replied || interaction.deferred) {
+        await interaction.followUp({ content: '⚠️ There was an error while executing this command!', ephemeral: true });
+      } else {
+        await interaction.reply({ content: '⚠️ There was an error while executing this command!', ephemeral: true });
+      }
+    }
+  }
+};

@@ -1,0 +1,7 @@
+{
+  "name": "setup",
+  "displayName": "🔧 Setup Commands",
+  "version": "2.0.0",
+  "description": "Configure server settings, welcome/goodbye alerts, moderation logs, and role defaults.",
+  "enabledByDefault": true
+}

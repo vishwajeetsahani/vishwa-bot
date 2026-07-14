@@ -1,0 +1,6 @@
+{
+  "name": "utility",
+  "version": "2.0.0",
+  "description": "General utility and setup checks including ping, settings, and help.",
+  "enabledByDefault": true
+}
