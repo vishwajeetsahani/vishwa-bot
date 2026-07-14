@@ -834,9 +834,12 @@ class LevelRepository {
     const current = this.get(guildId, userId); // Ensure level record exists & get current values
     const oldLevel = current ? current.level : 1;
 
+    console.log(`[TRACE] updateXp called. guildId: ${guildId}, userId: ${userId}, xp: ${xp}, level: ${level}, oldLevel: ${oldLevel}`);
+
     this.updateXpStmt.run(xp, level, guildId, userId);
 
     if (level > oldLevel) {
+      console.log(`[TRACE] Level increase detected. Publishing userLevelUp event.`);
       const eventBus = require('./eventBus');
       eventBus.publish('userLevelUp', {
         guildId,
@@ -845,6 +848,8 @@ class LevelRepository {
         newLevel: level,
         xp
       });
+    } else {
+      console.log(`[TRACE] No level increase: level (${level}) <= oldLevel (${oldLevel})`);
     }
 
     return this.get(guildId, userId);

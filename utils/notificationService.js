@@ -100,8 +100,11 @@ class NotificationService {
     const db = container.resolve('db');
     const templates = container.resolve('templates');
 
+    console.log(`[TRACE] _dispatchGeneric for type: ${type}, channelKey: ${channelKey}`);
+
     // 1. Check if notification type is enabled
     const settings = db.notificationSettings.get(guild.id, type);
+    console.log(`[TRACE] Settings for ${type}: enabled = ${settings.enabled}`);
     if (!settings.enabled) {
       console.log(`[NotificationService] Skipped notification type "${type}" in "${guild.name}" — disabled in settings.`);
       return null;
@@ -110,6 +113,7 @@ class NotificationService {
     // 2. Resolve destination channel
     const config = db.configs.get(guild.id);
     const channelId = config[channelKey];
+    console.log(`[TRACE] Configured channel ID for ${channelKey}:`, channelId);
     if (!channelId) {
       console.log(`[NotificationService] Skipped notification type "${type}" in "${guild.name}" — channel not configured.`);
       return null;
@@ -120,9 +124,11 @@ class NotificationService {
     try {
       channel = guild.channels.cache.get(channelId);
       if (!channel) {
+        console.log(`[TRACE] Channel not in cache. Fetching channel ${channelId}`);
         channel = await guild.channels.fetch(channelId);
       }
     } catch (err) {
+      console.log(`[TRACE] Error fetching channel ${channelId}:`, err.message);
       if (container.has('errors')) {
         container.resolve('errors').log(err, `notification_channel_fetch_error:${type}:${guild.id}`);
       } else {
@@ -135,12 +141,15 @@ class NotificationService {
       console.log(`[NotificationService] Skipped notification type "${type}" in "${guild.name}" — invalid or deleted channel.`);
       return null;
     }
+    console.log(`[TRACE] Resolved channel: ${channel.name}`);
 
     // Check bot permissions in this channel
     const botMember = guild.members.me;
     if (botMember) {
       const perms = channel.permissionsFor(botMember);
+      console.log(`[TRACE] Bot permissions in channel: SendMessages = ${perms ? perms.has('SendMessages') : false}, EmbedLinks = ${perms ? perms.has('EmbedLinks') : false}`);
       if (perms && (!perms.has('SendMessages') || !perms.has('EmbedLinks'))) {
+        console.log(`[TRACE] Missing SendMessages or EmbedLinks permissions in channel ${channel.name}`);
         const missingPermsErr = new Error(`Missing SendMessages or EmbedLinks permissions in channel ${channel.name}`);
         if (container.has('errors')) {
           container.resolve('errors').log(missingPermsErr, `notification_missing_permissions:${type}:${guild.id}`);
@@ -184,8 +193,12 @@ class NotificationService {
 
     try {
       this.announcementsCount++;
-      return await channel.send(payload);
+      console.log(`[TRACE] Attempting to send message payload to channel...`);
+      const sentMsg = await channel.send(payload);
+      console.log(`[TRACE] Message successfully sent! Message ID: ${sentMsg.id}`);
+      return sentMsg;
     } catch (err) {
+      console.log(`[TRACE] Exception caught during channel.send:`, err.message);
       if (container.has('errors')) {
         container.resolve('errors').log(err, `notification_send_error:${type}:${guild.id}`);
       } else {

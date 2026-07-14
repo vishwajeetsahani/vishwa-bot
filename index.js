@@ -99,15 +99,33 @@ container.register('client', client);
 
     // Register global Level Up notification subscriber
     eventBus.subscribe('userLevelUp', async ({ guildId, userId, oldLevel, newLevel, xp }) => {
+      console.log(`[TRACE] EventBus userLevelUp event received. guildId: ${guildId}, userId: ${userId}, oldLevel: ${oldLevel}, newLevel: ${newLevel}`);
       try {
-        const guild = client.guilds.cache.get(guildId) || await client.guilds.fetch(guildId).catch(() => null);
-        if (!guild) return;
+        const guild = client.guilds.cache.get(guildId) || await client.guilds.fetch(guildId).catch((fetchErr) => {
+          console.log(`[TRACE] Failed to fetch guild ${guildId}:`, fetchErr.message);
+          return null;
+        });
+        if (!guild) {
+          console.log(`[TRACE] Guild ${guildId} not found/resolved. Returning.`);
+          return;
+        }
+        console.log(`[TRACE] Resolved guild: ${guild.name}`);
 
-        const user = client.users.cache.get(userId) || await client.users.fetch(userId).catch(() => null);
-        if (!user) return;
+        const user = client.users.cache.get(userId) || await client.users.fetch(userId).catch((fetchErr) => {
+          console.log(`[TRACE] Failed to fetch user ${userId}:`, fetchErr.message);
+          return null;
+        });
+        if (!user) {
+          console.log(`[TRACE] User ${userId} not found/resolved. Returning.`);
+          return;
+        }
+        console.log(`[TRACE] Resolved user: ${user.tag || user.username}`);
 
-        await notificationService.sendAnnouncement(guild, 'level_up', user, { level: newLevel, xp });
+        console.log(`[TRACE] Calling notificationService.sendAnnouncement`);
+        const result = await notificationService.sendAnnouncement(guild, 'level_up', user, { level: newLevel, xp });
+        console.log(`[TRACE] sendAnnouncement result:`, result ? 'Success (Message ID: ' + result.id + ')' : 'Failure/Skipped');
       } catch (err) {
+        console.log('[TRACE] Error in userLevelUp subscriber:', err);
         errorManager.log(err, 'eventBus_userLevelUp_handler');
       }
     });
