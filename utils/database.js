@@ -149,6 +149,12 @@ class SqlJsWrapper {
         community_channel_id TEXT DEFAULT NULL,
         economy_log_channel_id TEXT DEFAULT NULL,
         economy_manager_role_id TEXT DEFAULT NULL,
+        level_channel_id TEXT DEFAULT NULL,
+        quest_channel_id TEXT DEFAULT NULL,
+        achievement_channel_id TEXT DEFAULT NULL,
+        event_channel_id TEXT DEFAULT NULL,
+        rare_drop_channel_id TEXT DEFAULT NULL,
+        shop_channel_id TEXT DEFAULT NULL,
         updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
       );
 
@@ -298,6 +304,17 @@ class SqlJsWrapper {
       );
 
       CREATE INDEX IF NOT EXISTS idx_economy_logs_guild ON economy_logs(guild_id);
+
+      CREATE TABLE IF NOT EXISTS notification_settings (
+        guild_id TEXT NOT NULL,
+        notification_type TEXT NOT NULL,
+        enabled BOOLEAN DEFAULT 1,
+        mention_type TEXT DEFAULT 'none',
+        PRIMARY KEY (guild_id, notification_type),
+        FOREIGN KEY (guild_id) REFERENCES guild_configs(guild_id) ON DELETE CASCADE
+      );
+
+      CREATE INDEX IF NOT EXISTS idx_notification_settings ON notification_settings(guild_id);
     `);
 
     // Upgrade existing database if columns are missing
@@ -318,6 +335,24 @@ class SqlJsWrapper {
     } catch (e) {}
     try {
       this.db.exec('ALTER TABLE guild_configs ADD COLUMN economy_manager_role_id TEXT DEFAULT NULL');
+    } catch (e) {}
+    try {
+      this.db.exec('ALTER TABLE guild_configs ADD COLUMN level_channel_id TEXT DEFAULT NULL');
+    } catch (e) {}
+    try {
+      this.db.exec('ALTER TABLE guild_configs ADD COLUMN quest_channel_id TEXT DEFAULT NULL');
+    } catch (e) {}
+    try {
+      this.db.exec('ALTER TABLE guild_configs ADD COLUMN achievement_channel_id TEXT DEFAULT NULL');
+    } catch (e) {}
+    try {
+      this.db.exec('ALTER TABLE guild_configs ADD COLUMN event_channel_id TEXT DEFAULT NULL');
+    } catch (e) {}
+    try {
+      this.db.exec('ALTER TABLE guild_configs ADD COLUMN rare_drop_channel_id TEXT DEFAULT NULL');
+    } catch (e) {}
+    try {
+      this.db.exec('ALTER TABLE guild_configs ADD COLUMN shop_channel_id TEXT DEFAULT NULL');
     } catch (e) {}
   }
 
@@ -407,6 +442,12 @@ class GuildConfigRepository {
     this.updateCommunityChannel = db.prepare('UPDATE guild_configs SET community_channel_id = ? WHERE guild_id = ?');
     this.updateEconomyLogChannel = db.prepare('UPDATE guild_configs SET economy_log_channel_id = ? WHERE guild_id = ?');
     this.updateEconomyManagerRole = db.prepare('UPDATE guild_configs SET economy_manager_role_id = ? WHERE guild_id = ?');
+    this.updateLevelChannel = db.prepare('UPDATE guild_configs SET level_channel_id = ? WHERE guild_id = ?');
+    this.updateQuestChannel = db.prepare('UPDATE guild_configs SET quest_channel_id = ? WHERE guild_id = ?');
+    this.updateAchievementChannel = db.prepare('UPDATE guild_configs SET achievement_channel_id = ? WHERE guild_id = ?');
+    this.updateEventChannel = db.prepare('UPDATE guild_configs SET event_channel_id = ? WHERE guild_id = ?');
+    this.updateRareDropChannel = db.prepare('UPDATE guild_configs SET rare_drop_channel_id = ? WHERE guild_id = ?');
+    this.updateShopChannel = db.prepare('UPDATE guild_configs SET shop_channel_id = ? WHERE guild_id = ?');
   }
 
   /**
@@ -443,6 +484,12 @@ class GuildConfigRepository {
       if (updates.communityChannel !== undefined) this.updateCommunityChannel.run(updates.communityChannel, guildId);
       if (updates.economyLogChannel !== undefined) this.updateEconomyLogChannel.run(updates.economyLogChannel, guildId);
       if (updates.economyManagerRole !== undefined) this.updateEconomyManagerRole.run(updates.economyManagerRole, guildId);
+      if (updates.levelChannel !== undefined) this.updateLevelChannel.run(updates.levelChannel, guildId);
+      if (updates.questChannel !== undefined) this.updateQuestChannel.run(updates.questChannel, guildId);
+      if (updates.achievementChannel !== undefined) this.updateAchievementChannel.run(updates.achievementChannel, guildId);
+      if (updates.eventChannel !== undefined) this.updateEventChannel.run(updates.eventChannel, guildId);
+      if (updates.rareDropChannel !== undefined) this.updateRareDropChannel.run(updates.rareDropChannel, guildId);
+      if (updates.shopChannel !== undefined) this.updateShopChannel.run(updates.shopChannel, guildId);
       
       if (updates.spamThreshold !== undefined || updates.spamInterval !== undefined) {
         const current = this.get(guildId);
@@ -473,7 +520,13 @@ class GuildConfigRepository {
       spamInterval: row.spam_interval,
       communityChannel: row.community_channel_id,
       economyLogChannel: row.economy_log_channel_id,
-      economyManagerRole: row.economy_manager_role_id
+      economyManagerRole: row.economy_manager_role_id,
+      levelChannel: row.level_channel_id,
+      questChannel: row.quest_channel_id,
+      achievementChannel: row.achievement_channel_id,
+      eventChannel: row.event_channel_id,
+      rareDropChannel: row.rare_drop_channel_id,
+      shopChannel: row.shop_channel_id
     };
   }
 }
@@ -988,6 +1041,56 @@ const transactions = new TransactionRepository(sqlite, users);
 const roleRewards = new RoleRewardRepository(sqlite, configs);
 const economyLogs = new EconomyLogRepository(sqlite, configs);
 
+class NotificationSettingsRepository {
+  constructor(db, configs) {
+    this.db = db;
+    this.configs = configs;
+    this.selectStmt = db.prepare('SELECT * FROM notification_settings WHERE guild_id = ? AND notification_type = ?');
+    this.selectAllStmt = db.prepare('SELECT * FROM notification_settings WHERE guild_id = ?');
+    this.upsertStmt = db.prepare(`
+      INSERT INTO notification_settings (guild_id, notification_type, enabled, mention_type)
+      VALUES (?, ?, ?, ?)
+      ON CONFLICT(guild_id, notification_type) DO UPDATE SET enabled = excluded.enabled, mention_type = excluded.mention_type
+    `);
+  }
+
+  get(guildId, type) {
+    this.configs.get(guildId); // Ensure config exists
+    const row = this.selectStmt.get(guildId, type);
+    if (!row) {
+      return {
+        enabled: true,
+        mentionType: 'none'
+      };
+    }
+    return {
+      enabled: !!row.enabled,
+      mentionType: row.mention_type
+    };
+  }
+
+  getAll(guildId) {
+    this.configs.get(guildId);
+    const rows = this.selectAllStmt.all(guildId);
+    const map = {};
+    for (const r of rows) {
+      map[r.notification_type] = {
+        enabled: !!r.enabled,
+        mentionType: r.mention_type
+      };
+    }
+    return map;
+  }
+
+  set(guildId, type, enabled, mentionType) {
+    this.configs.get(guildId);
+    this.upsertStmt.run(guildId, type, enabled ? 1 : 0, mentionType);
+    return this.get(guildId, type);
+  }
+}
+
+const notificationSettings = new NotificationSettingsRepository(sqlite, configs);
+
 module.exports = {
   sqlite,
   configs,
@@ -1003,6 +1106,7 @@ module.exports = {
   transactions,
   roleRewards,
   economyLogs,
+  notificationSettings,
   init: () => sqlite.init(),
   // Backward compatibility layers
   ensureDataFiles: () => {}, // Schema is generated on module instantiation

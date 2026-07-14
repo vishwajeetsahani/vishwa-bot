@@ -1,0 +1,7 @@
+{
+  "name": "community",
+  "displayName": "👥 Community Core",
+  "version": "1.0.0",
+  "description": "Manages server notification preferences, mention styles, channels, and community events.",
+  "enabledByDefault": true
+}

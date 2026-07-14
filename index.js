@@ -35,6 +35,7 @@ const embedBuilder = require('./utils/embedBuilder');
 const componentBuilder = require('./utils/componentBuilder');
 const imageService = require('./utils/imageService');
 const notificationService = require('./utils/notificationService');
+const templateEngine = require('./utils/templateEngine');
 const { ModerationService } = require('./utils/moderationService');
 const { EconomyService } = require('./plugins/economy/services/EconomyService');
 
@@ -49,6 +50,7 @@ container.register('embeds', embedBuilder);
 container.register('components', componentBuilder);
 container.register('image', imageService);
 container.register('notifications', notificationService);
+container.register('templates', templateEngine);
 container.register('moderation', ModerationService);
 container.register('economy', EconomyService);
 
