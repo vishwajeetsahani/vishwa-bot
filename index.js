@@ -82,6 +82,8 @@ const client = new Client({
   partials: [Partials.Message, Partials.Channel, Partials.GuildMember]
 });
 
+container.register('client', client);
+
 (async () => {
   try {
     // Initialize WebAssembly sql.js database first
@@ -94,6 +96,21 @@ const client = new Client({
     // Load commands and events
     loadEvents(client);
     loadPlugins(client);
+
+    // Register global Level Up notification subscriber
+    eventBus.subscribe('userLevelUp', async ({ guildId, userId, oldLevel, newLevel, xp }) => {
+      try {
+        const guild = client.guilds.cache.get(guildId) || await client.guilds.fetch(guildId).catch(() => null);
+        if (!guild) return;
+
+        const user = client.users.cache.get(userId) || await client.users.fetch(userId).catch(() => null);
+        if (!user) return;
+
+        await notificationService.sendAnnouncement(guild, 'level_up', user, { level: newLevel, xp });
+      } catch (err) {
+        errorManager.log(err, 'eventBus_userLevelUp_handler');
+      }
+    });
 
     // Global safety nets
     process.on('unhandledRejection', (reason) => {

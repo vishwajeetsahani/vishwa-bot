@@ -127,6 +127,10 @@ async function runTests() {
   if (!container.has('errors')) {
     container.register('errors', mockErrorsLogger);
   }
+  const { EconomyService } = require('../plugins/economy/services/EconomyService');
+  if (!container.has('economy')) {
+    container.register('economy', EconomyService);
+  }
   
   const guildId = 'test_guild_notif_' + Math.random().toString(36).slice(2, 8);
   const userId = 'test_user_notif_' + Math.random().toString(36).slice(2, 8);
@@ -284,6 +288,86 @@ async function runTests() {
     }
     console.log('✅ Prepared Quest method resolved and dispatched successfully.');
   }
+
+  // --- Test 8: End-To-End Level Up Announcement Pipeline ---
+  console.log('Testing End-To-End Level Up Announcement Pipeline...');
+  
+  // Register the eventBus subscriber (simulating index.js)
+  const eventBus = require('../utils/eventBus');
+  const economyService = container.resolve('economy');
+  
+  // Reset channels, settings, and db XP
+  db.levels.updateXp(guildId, userId, 0, 1);
+  db.notificationSettings.set(guildId, 'level_up', true, 'none');
+  db.configs.update(guildId, { announcementChannel: 'ch_announce' });
+  chAnnounce.sentMessages = [];
+  
+  // Setup the index.js subscription simulation
+  eventBus.subscribe('userLevelUp', async ({ guildId: evGuildId, userId: evUserId, oldLevel, newLevel, xp }) => {
+    try {
+      const guild = mockGuild; // Use mockGuild directly for test
+      const user = mockUser;   // Use mockUser directly for test
+      await notificationService.sendAnnouncement(guild, 'level_up', user, { level: newLevel, xp });
+    } catch (err) {
+      console.error('Subscription error in test:', err);
+    }
+  });
+
+  // Scenario 8a: XP without a level-up sends no announcement
+  // Awarding 50 XP (Level remains 1 because Math.floor(Math.sqrt(50 / 100)) + 1 = 1)
+  chAnnounce.sentMessages = [];
+  economyService.addXP(userId, guildId, 50, 'CHAT');
+  if (chAnnounce.sentMessages.length !== 0) {
+    throw new Error(`Expected 0 announcements when XP gain does not cause level-up, but got ${chAnnounce.sentMessages.length}`);
+  }
+  console.log('   ✅ XP gain without level-up correctly sends NO announcement.');
+
+  // Scenario 8b: XP causing a level-up sends exactly one announcement
+  // Current XP is 50. Awarding 100 XP (Total XP: 150 -> Level = Math.floor(Math.sqrt(150 / 100)) + 1 = 2)
+  chAnnounce.sentMessages = [];
+  economyService.addXP(userId, guildId, 100, 'CHAT');
+  await new Promise(resolve => setTimeout(resolve, 50));
+
+  if (chAnnounce.sentMessages.length !== 1) {
+    throw new Error(`Expected exactly 1 level-up announcement, but got ${chAnnounce.sentMessages.length}`);
+  }
+  const annMsg = chAnnounce.sentMessages[0];
+  if (!annMsg.embeds[0].data.description.includes('leveled up to level **2**')) {
+    throw new Error(`Unexpected announcement message text: ${annMsg.embeds[0].data.description}`);
+  }
+  console.log('   ✅ XP causing level-up correctly sends exactly ONE announcement.');
+
+  // Scenario 8c: Missing channel configuration does not crash
+  chAnnounce.sentMessages = [];
+  db.configs.update(guildId, { announcementChannel: null }); // Remove announcement channel
+  // Current XP is 150 (Level 2). Awarding 300 XP (Total XP: 450 -> Level = Math.floor(Math.sqrt(450 / 100)) + 1 = 3)
+  let testError = null;
+  try {
+    economyService.addXP(userId, guildId, 300, 'CHAT');
+    await new Promise(resolve => setTimeout(resolve, 50));
+  } catch (err) {
+    testError = err;
+  }
+  if (testError) {
+    throw new Error(`Framework crashed on missing announcement channel config: ${testError.message}`);
+  }
+  console.log('   ✅ Missing announcement channel configuration does not crash.');
+
+  // Scenario 8d: Disabled notifications do not send
+  // Reset announcement channel
+  db.configs.update(guildId, { announcementChannel: 'ch_announce' });
+  // Disable level_up notifications
+  db.notificationSettings.set(guildId, 'level_up', false, 'none');
+  chAnnounce.sentMessages = [];
+  
+  // Current XP is 450 (Level 3). Awarding 500 XP (Total XP: 950 -> Level = Math.floor(Math.sqrt(950 / 100)) + 1 = 4)
+  economyService.addXP(userId, guildId, 500, 'CHAT');
+  await new Promise(resolve => setTimeout(resolve, 50));
+
+  if (chAnnounce.sentMessages.length !== 0) {
+    throw new Error(`Expected 0 announcements since notifications are disabled, but got ${chAnnounce.sentMessages.length}`);
+  }
+  console.log('   ✅ Disabled level-up notifications are correctly ignored.');
 
   console.log('\n🎉 ALL FINAL FRAMEWORK NOTIFICATION TESTS COMPLETED SUCCESSFULLY! 🎉');
 }

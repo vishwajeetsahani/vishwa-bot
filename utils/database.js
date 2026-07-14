@@ -831,8 +831,22 @@ class LevelRepository {
   }
 
   updateXp(guildId, userId, xp, level) {
-    this.get(guildId, userId); // Ensure level record exists
+    const current = this.get(guildId, userId); // Ensure level record exists & get current values
+    const oldLevel = current ? current.level : 1;
+
     this.updateXpStmt.run(xp, level, guildId, userId);
+
+    if (level > oldLevel) {
+      const eventBus = require('./eventBus');
+      eventBus.publish('userLevelUp', {
+        guildId,
+        userId,
+        oldLevel,
+        newLevel: level,
+        xp
+      });
+    }
+
     return this.get(guildId, userId);
   }
 

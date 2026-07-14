@@ -35,16 +35,7 @@ module.exports = {
       // Set cooldown for 60 seconds
       cache.set(cooldownKey, true, 60 * 1000);
 
-      // On level up: publish event via EventBus
-      if (xpResult && xpResult.leveledUp) {
-        eventBus.publish('userLevelUp', {
-          guildId,
-          userId,
-          oldLevel: xpResult.oldLevel,
-          newLevel: xpResult.newLevel,
-          xp: xpResult.newXp
-        });
-      }
+
     } catch (err) {
       if (container.has('errors')) {
         container.resolve('errors').log(err, 'event:messageCreate:economy');
