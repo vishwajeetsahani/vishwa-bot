@@ -490,39 +490,56 @@ class GuildConfigRepository {
     this.insertStmt.run(guildId);
 
     const transaction = this.db.transaction((guildId, updates) => {
-      if (updates.prefix !== undefined) this.updatePrefix.run(updates.prefix, guildId);
-      if (updates.antiLink !== undefined) this.updateAntiLink.run(updates.antiLink ? 1 : 0, guildId);
-      if (updates.antiInvite !== undefined) this.updateAntiInvite.run(updates.antiInvite ? 1 : 0, guildId);
-      if (updates.antiSpam !== undefined) this.updateAntiSpam.run(updates.antiSpam ? 1 : 0, guildId);
-      if (updates.welcomeChannel !== undefined) this.updateWelcomeChannel.run(updates.welcomeChannel, guildId);
-      if (updates.welcomeMessage !== undefined) this.updateWelcomeMessage.run(updates.welcomeMessage, guildId);
-      if (updates.goodbyeChannel !== undefined) this.updateGoodbyeChannel.run(updates.goodbyeChannel, guildId);
-      if (updates.goodbyeMessage !== undefined) this.updateGoodbyeMessage.run(updates.goodbyeMessage, guildId);
-      if (updates.logChannel !== undefined) this.updateLogChannel.run(updates.logChannel, guildId);
-      if (updates.autoRole !== undefined) this.updateAutoRole.run(updates.autoRole, guildId);
-      if (updates.communityChannel !== undefined) this.updateCommunityChannel.run(updates.communityChannel, guildId);
-      if (updates.economyLogChannel !== undefined) this.updateEconomyLogChannel.run(updates.economyLogChannel, guildId);
-      if (updates.economyManagerRole !== undefined) this.updateEconomyManagerRole.run(updates.economyManagerRole, guildId);
-      if (updates.levelChannel !== undefined) this.updateLevelChannel.run(updates.levelChannel, guildId);
-      if (updates.questChannel !== undefined) this.updateQuestChannel.run(updates.questChannel, guildId);
-      if (updates.achievementChannel !== undefined) this.updateAchievementChannel.run(updates.achievementChannel, guildId);
-      if (updates.eventChannel !== undefined) this.updateEventChannel.run(updates.eventChannel, guildId);
-      if (updates.rareDropChannel !== undefined) this.updateRareDropChannel.run(updates.rareDropChannel, guildId);
-      if (updates.shopChannel !== undefined) this.updateShopChannel.run(updates.shopChannel, guildId);
-      if (updates.announcementChannel !== undefined) this.updateAnnouncementChannel.run(updates.announcementChannel, guildId);
-      if (updates.leaderboardChannel !== undefined) this.updateLeaderboardChannel.run(updates.leaderboardChannel, guildId);
-      if (updates.adminLogChannel !== undefined) this.updateAdminLogChannel.run(updates.adminLogChannel, guildId);
+      let totalChanges = 0;
+      if (updates.prefix !== undefined) totalChanges += (this.updatePrefix.run(updates.prefix, guildId)?.changes || 0);
+      if (updates.antiLink !== undefined) totalChanges += (this.updateAntiLink.run(updates.antiLink ? 1 : 0, guildId)?.changes || 0);
+      if (updates.antiInvite !== undefined) totalChanges += (this.updateAntiInvite.run(updates.antiInvite ? 1 : 0, guildId)?.changes || 0);
+      if (updates.antiSpam !== undefined) totalChanges += (this.updateAntiSpam.run(updates.antiSpam ? 1 : 0, guildId)?.changes || 0);
+      if (updates.welcomeChannel !== undefined) totalChanges += (this.updateWelcomeChannel.run(updates.welcomeChannel, guildId)?.changes || 0);
+      if (updates.welcomeMessage !== undefined) totalChanges += (this.updateWelcomeMessage.run(updates.welcomeMessage, guildId)?.changes || 0);
+      if (updates.goodbyeChannel !== undefined) totalChanges += (this.updateGoodbyeChannel.run(updates.goodbyeChannel, guildId)?.changes || 0);
+      if (updates.goodbyeMessage !== undefined) totalChanges += (this.updateGoodbyeMessage.run(updates.goodbyeMessage, guildId)?.changes || 0);
+      if (updates.logChannel !== undefined) totalChanges += (this.updateLogChannel.run(updates.logChannel, guildId)?.changes || 0);
+      if (updates.autoRole !== undefined) totalChanges += (this.updateAutoRole.run(updates.autoRole, guildId)?.changes || 0);
+      if (updates.communityChannel !== undefined) totalChanges += (this.updateCommunityChannel.run(updates.communityChannel, guildId)?.changes || 0);
+      if (updates.economyLogChannel !== undefined) totalChanges += (this.updateEconomyLogChannel.run(updates.economyLogChannel, guildId)?.changes || 0);
+      if (updates.economyManagerRole !== undefined) totalChanges += (this.updateEconomyManagerRole.run(updates.economyManagerRole, guildId)?.changes || 0);
+      if (updates.levelChannel !== undefined) totalChanges += (this.updateLevelChannel.run(updates.levelChannel, guildId)?.changes || 0);
+      if (updates.questChannel !== undefined) totalChanges += (this.updateQuestChannel.run(updates.questChannel, guildId)?.changes || 0);
+      if (updates.achievementChannel !== undefined) totalChanges += (this.updateAchievementChannel.run(updates.achievementChannel, guildId)?.changes || 0);
+      if (updates.eventChannel !== undefined) totalChanges += (this.updateEventChannel.run(updates.eventChannel, guildId)?.changes || 0);
+      if (updates.rareDropChannel !== undefined) totalChanges += (this.updateRareDropChannel.run(updates.rareDropChannel, guildId)?.changes || 0);
+      if (updates.shopChannel !== undefined) totalChanges += (this.updateShopChannel.run(updates.shopChannel, guildId)?.changes || 0);
+      if (updates.announcementChannel !== undefined) totalChanges += (this.updateAnnouncementChannel.run(updates.announcementChannel, guildId)?.changes || 0);
+      if (updates.leaderboardChannel !== undefined) totalChanges += (this.updateLeaderboardChannel.run(updates.leaderboardChannel, guildId)?.changes || 0);
+      if (updates.adminLogChannel !== undefined) totalChanges += (this.updateAdminLogChannel.run(updates.adminLogChannel, guildId)?.changes || 0);
       
       if (updates.spamThreshold !== undefined || updates.spamInterval !== undefined) {
         const current = this.get(guildId);
         const threshold = updates.spamThreshold !== undefined ? updates.spamThreshold : current.spamThreshold;
         const interval = updates.spamInterval !== undefined ? updates.spamInterval : current.spamInterval;
-        this.updateSpamSettings.run(threshold, interval, guildId);
+        totalChanges += (this.updateSpamSettings.run(threshold, interval, guildId)?.changes || 0);
       }
+
+      console.log(`[TRACE_PERSISTENCE] Rows affected by update query:`, totalChanges);
     });
 
     transaction(guildId, updates);
-    return this.get(guildId);
+
+    // Immediately query the database after update
+    const rawRow = this.db.prepare('SELECT guild_id, announcement_channel_id, economy_log_channel_id, admin_log_channel_id, leaderboard_channel_id FROM guild_configs WHERE guild_id = ?').get(guildId);
+    console.log(`[TRACE_PERSISTENCE] Raw Database Record:`);
+    console.log(`  Guild ID:`, rawRow ? rawRow.guild_id : null);
+    console.log(`  Announcement Channel ID:`, rawRow ? rawRow.announcement_channel_id : null);
+    console.log(`  Economy Log Channel ID:`, rawRow ? rawRow.economy_log_channel_id : null);
+    console.log(`  Admin Log Channel ID:`, rawRow ? rawRow.admin_log_channel_id : null);
+    console.log(`  Leaderboard Channel ID:`, rawRow ? rawRow.leaderboard_channel_id : null);
+
+    // Immediately reload the configuration
+    const loadedConfig = this.get(guildId);
+    console.log(`[TRACE_PERSISTENCE] Loaded configuration object:`, loadedConfig);
+
+    return loadedConfig;
   }
 
   mapConfig(row) {

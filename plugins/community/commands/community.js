@@ -112,6 +112,8 @@ module.exports = {
     const components = container.resolve('components');
     const guildId = interaction.guild.id;
 
+    console.log(`[TRACE_CMD] /community executed. Guild ID from Discord: ${guildId}`);
+
     // -------------------------------------------------------------
     // Apply slash command option parameters if supplied
     // -------------------------------------------------------------
@@ -131,12 +133,18 @@ module.exports = {
     for (const [optionName, dbKey] of Object.entries(configMap)) {
       const channelObj = interaction.options.getChannel(optionName);
       if (channelObj) {
+        console.log(`[TRACE_CMD] Option optionName: ${optionName}, channel ID received: ${channelObj.id}`);
         channelUpdates[dbKey] = channelObj.id;
       }
     }
 
     if (Object.keys(channelUpdates).length > 0) {
+      console.log(`[TRACE_CMD] Immediately before calling db.configs.update(). Guild ID: ${guildId}, Update Object:`, channelUpdates);
+      console.log(`[TRACE_CMD] Invoking db.configs.update().`);
       db.configs.update(guildId, channelUpdates);
+      
+      const currentConfig = db.configs.get(guildId);
+      console.log(`[TRACE_CMD] Immediately after db.configs.update(). Returned configuration:`, currentConfig);
     }
 
     const typeMap = {
@@ -357,7 +365,13 @@ module.exports = {
           const selectedChId = i.values[0];
           const chKey = typeChannelKeys[currentEditType];
           
+          console.log(`[TRACE_CMD] Selected option type: ${currentEditType}, channel ID received from Discord: ${selectedChId}`);
+          console.log(`[TRACE_CMD] Immediately before calling db.configs.update(). Guild ID: ${guildId}, Update Object:`, { [chKey]: selectedChId });
+          console.log(`[TRACE_CMD] Invoking db.configs.update().`);
           db.configs.update(guildId, { [chKey]: selectedChId });
+
+          const currentConfig = db.configs.get(guildId);
+          console.log(`[TRACE_CMD] Immediately after db.configs.update(). Returned configuration:`, currentConfig);
           
           const editor = buildSubEditor(currentEditType);
           await i.update({
