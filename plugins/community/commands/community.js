@@ -4,7 +4,8 @@ const {
   ChannelType,
   ButtonStyle,
   ComponentType,
-  ChannelSelectMenuBuilder
+  ChannelSelectMenuBuilder,
+  RoleSelectMenuBuilder
 } = require('discord.js');
 const container = require('../../../utils/container');
 
@@ -15,59 +16,92 @@ module.exports = {
     .addSubcommand(sub =>
       sub.setName('setup')
         .setDescription('Configure notification channels, active states, and ping settings.')
-        // 8 Channel Options
-        .addChannelOption(o => o.setName('community-channel').setDescription('Channel for general community notifications.').addChannelTypes(ChannelType.GuildText))
-        .addChannelOption(o => o.setName('level-channel').setDescription('Channel for Level Up notifications.').addChannelTypes(ChannelType.GuildText))
+        // 9 Channel Options
+        .addChannelOption(o => o.setName('announcement-channel').setDescription('Channel for announcements (e.g. Level Up).').addChannelTypes(ChannelType.GuildText))
         .addChannelOption(o => o.setName('economy-log-channel').setDescription('Channel for Economy Log notifications.').addChannelTypes(ChannelType.GuildText))
         .addChannelOption(o => o.setName('quest-channel').setDescription('Channel for Quest notifications.').addChannelTypes(ChannelType.GuildText))
+        .addChannelOption(o => o.setName('shop-channel').setDescription('Channel for Shop notifications.').addChannelTypes(ChannelType.GuildText))
+        .addChannelOption(o => o.setName('rare-drop-channel').setDescription('Channel for Rare Drop notifications.').addChannelTypes(ChannelType.GuildText))
         .addChannelOption(o => o.setName('achievement-channel').setDescription('Channel for Achievement notifications.').addChannelTypes(ChannelType.GuildText))
         .addChannelOption(o => o.setName('event-channel').setDescription('Channel for Event notifications.').addChannelTypes(ChannelType.GuildText))
-        .addChannelOption(o => o.setName('rare-drop-channel').setDescription('Channel for Rare Drop notifications.').addChannelTypes(ChannelType.GuildText))
-        .addChannelOption(o => o.setName('shop-channel').setDescription('Channel for Shop notifications.').addChannelTypes(ChannelType.GuildText))
-        // 6 Toggle Options
+        .addChannelOption(o => o.setName('leaderboard-channel').setDescription('Channel for Leaderboard notifications.').addChannelTypes(ChannelType.GuildText))
+        .addChannelOption(o => o.setName('admin-log-channel').setDescription('Channel for Admin Log notifications.').addChannelTypes(ChannelType.GuildText))
+        // 9 Toggle Options
         .addBooleanOption(o => o.setName('level-enabled').setDescription('Enable/Disable Level Up notifications.'))
-        .addBooleanOption(o => o.setName('achievement-enabled').setDescription('Enable/Disable Achievement notifications.'))
-        .addBooleanOption(o => o.setName('quest-enabled').setDescription('Enable/Disable Quest notifications.'))
         .addBooleanOption(o => o.setName('economy-enabled').setDescription('Enable/Disable Economy notifications.'))
-        .addBooleanOption(o => o.setName('rare-drop-enabled').setDescription('Enable/Disable Rare Drop notifications.'))
+        .addBooleanOption(o => o.setName('quest-enabled').setDescription('Enable/Disable Quest notifications.'))
         .addBooleanOption(o => o.setName('shop-enabled').setDescription('Enable/Disable Shop notifications.'))
-        // 6 Mention Options
+        .addBooleanOption(o => o.setName('rare-drop-enabled').setDescription('Enable/Disable Rare Drop notifications.'))
+        .addBooleanOption(o => o.setName('achievement-enabled').setDescription('Enable/Disable Achievement notifications.'))
+        .addBooleanOption(o => o.setName('event-enabled').setDescription('Enable/Disable Event notifications.'))
+        .addBooleanOption(o => o.setName('leaderboard-enabled').setDescription('Enable/Disable Leaderboard notifications.'))
+        .addBooleanOption(o => o.setName('admin-enabled').setDescription('Enable/Disable Admin Log notifications.'))
+        // 9 Mention Options
         .addStringOption(o => o.setName('level-mention').setDescription('Mention setting for Level Up.').addChoices(
           { name: 'User', value: 'user' },
           { name: 'Here', value: 'here' },
           { name: 'Everyone', value: 'everyone' },
-          { name: 'No Mention', value: 'none' }
-        ))
-        .addStringOption(o => o.setName('achievement-mention').setDescription('Mention setting for Achievement.').addChoices(
-          { name: 'User', value: 'user' },
-          { name: 'Here', value: 'here' },
-          { name: 'Everyone', value: 'everyone' },
-          { name: 'No Mention', value: 'none' }
-        ))
-        .addStringOption(o => o.setName('quest-mention').setDescription('Mention setting for Quest.').addChoices(
-          { name: 'User', value: 'user' },
-          { name: 'Here', value: 'here' },
-          { name: 'Everyone', value: 'everyone' },
+          { name: 'Custom Role', value: 'role' },
           { name: 'No Mention', value: 'none' }
         ))
         .addStringOption(o => o.setName('economy-mention').setDescription('Mention setting for Economy.').addChoices(
           { name: 'User', value: 'user' },
           { name: 'Here', value: 'here' },
           { name: 'Everyone', value: 'everyone' },
+          { name: 'Custom Role', value: 'role' },
           { name: 'No Mention', value: 'none' }
         ))
-        .addStringOption(o => o.setName('rare-drop-mention').setDescription('Mention setting for Rare Drop.').addChoices(
+        .addStringOption(o => o.setName('quest-mention').setDescription('Mention setting for Quests.').addChoices(
           { name: 'User', value: 'user' },
           { name: 'Here', value: 'here' },
           { name: 'Everyone', value: 'everyone' },
+          { name: 'Custom Role', value: 'role' },
           { name: 'No Mention', value: 'none' }
         ))
         .addStringOption(o => o.setName('shop-mention').setDescription('Mention setting for Shop.').addChoices(
           { name: 'User', value: 'user' },
           { name: 'Here', value: 'here' },
           { name: 'Everyone', value: 'everyone' },
+          { name: 'Custom Role', value: 'role' },
           { name: 'No Mention', value: 'none' }
         ))
+        .addStringOption(o => o.setName('rare-drop-mention').setDescription('Mention setting for Rare Drops.').addChoices(
+          { name: 'User', value: 'user' },
+          { name: 'Here', value: 'here' },
+          { name: 'Everyone', value: 'everyone' },
+          { name: 'Custom Role', value: 'role' },
+          { name: 'No Mention', value: 'none' }
+        ))
+        .addStringOption(o => o.setName('achievement-mention').setDescription('Mention setting for Achievements.').addChoices(
+          { name: 'User', value: 'user' },
+          { name: 'Here', value: 'here' },
+          { name: 'Everyone', value: 'everyone' },
+          { name: 'Custom Role', value: 'role' },
+          { name: 'No Mention', value: 'none' }
+        ))
+        .addStringOption(o => o.setName('event-mention').setDescription('Mention setting for Events.').addChoices(
+          { name: 'User', value: 'user' },
+          { name: 'Here', value: 'here' },
+          { name: 'Everyone', value: 'everyone' },
+          { name: 'Custom Role', value: 'role' },
+          { name: 'No Mention', value: 'none' }
+        ))
+        .addStringOption(o => o.setName('leaderboard-mention').setDescription('Mention setting for Leaderboards.').addChoices(
+          { name: 'User', value: 'user' },
+          { name: 'Here', value: 'here' },
+          { name: 'Everyone', value: 'everyone' },
+          { name: 'Custom Role', value: 'role' },
+          { name: 'No Mention', value: 'none' }
+        ))
+        .addStringOption(o => o.setName('admin-mention').setDescription('Mention setting for Admin Logs.').addChoices(
+          { name: 'User', value: 'user' },
+          { name: 'Here', value: 'here' },
+          { name: 'Everyone', value: 'everyone' },
+          { name: 'Custom Role', value: 'role' },
+          { name: 'No Mention', value: 'none' }
+        ))
+        // Generic custom role option if configuration pings are role-bound
+        .addRoleOption(o => o.setName('mention-role').setDescription('Custom role to ping when mention setting is set to Custom Role.'))
     )
     .setDefaultMemberPermissions(PermissionFlagsBits.ManageGuild),
   modOnly: true,
@@ -83,14 +117,15 @@ module.exports = {
     // -------------------------------------------------------------
     const channelUpdates = {};
     const configMap = {
-      'community-channel': 'communityChannel',
-      'level-channel': 'levelChannel',
+      'announcement-channel': 'announcementChannel',
       'economy-log-channel': 'economyLogChannel',
       'quest-channel': 'questChannel',
+      'shop-channel': 'shopChannel',
+      'rare-drop-channel': 'rareDropChannel',
       'achievement-channel': 'achievementChannel',
       'event-channel': 'eventChannel',
-      'rare-drop-channel': 'rareDropChannel',
-      'shop-channel': 'shopChannel'
+      'leaderboard-channel': 'leaderboardChannel',
+      'admin-log-channel': 'adminLogChannel'
     };
 
     for (const [optionName, dbKey] of Object.entries(configMap)) {
@@ -105,15 +140,20 @@ module.exports = {
     }
 
     const typeMap = {
-      'level': { dbKey: 'level_up', fallbackName: 'Level Up' },
-      'achievement': { dbKey: 'achievement', fallbackName: 'Achievement' },
-      'quest': { dbKey: 'quest', fallbackName: 'Quest' },
-      'economy': { dbKey: 'economy', fallbackName: 'Economy' },
-      'rare-drop': { dbKey: 'rare_drop', fallbackName: 'Rare Drop' },
-      'shop': { dbKey: 'shop', fallbackName: 'Shop' }
+      'level': { dbKey: 'level_up', label: 'Level Up' },
+      'economy': { dbKey: 'economy_log', label: 'Economy Log' },
+      'quest': { dbKey: 'quest', label: 'Quest' },
+      'shop': { dbKey: 'shop', label: 'Shop' },
+      'rare-drop': { dbKey: 'rare_drop', label: 'Rare Drop' },
+      'achievement': { dbKey: 'achievement', label: 'Achievement' },
+      'event': { dbKey: 'event', label: 'Event' },
+      'leaderboard': { dbKey: 'leaderboard', label: 'Leaderboard' },
+      'admin': { dbKey: 'admin_log', label: 'Admin Log' }
     };
 
+    const mentionRole = interaction.options.getRole('mention-role');
     let settingsAppliedCount = 0;
+    
     for (const [optPrefix, info] of Object.entries(typeMap)) {
       const enabledVal = interaction.options.getBoolean(`${optPrefix}-enabled`);
       const mentionVal = interaction.options.getString(`${optPrefix}-mention`);
@@ -122,8 +162,9 @@ module.exports = {
         const current = db.notificationSettings.get(guildId, info.dbKey);
         const nextEnabled = enabledVal !== null ? enabledVal : current.enabled;
         const nextMention = mentionVal !== null ? mentionVal : current.mentionType;
+        const nextRoleId = (nextMention === 'role' && mentionRole) ? mentionRole.id : current.mentionRoleId;
 
-        db.notificationSettings.set(guildId, info.dbKey, nextEnabled, nextMention);
+        db.notificationSettings.set(guildId, info.dbKey, nextEnabled, nextMention, nextRoleId);
         settingsAppliedCount++;
       }
     }
@@ -135,11 +176,12 @@ module.exports = {
     // -------------------------------------------------------------
     let currentEditType = null; // null = Main Dashboard, string = specific type config
 
-    const formatMention = (type) => {
+    const formatMention = (type, roleId) => {
       switch (type) {
         case 'user': return '👤 User involved';
         case 'here': return '🔔 @here';
         case 'everyone': return '📢 @everyone';
+        case 'role': return roleId ? `🛡️ Custom Role (<@&${roleId}>)` : '🛡️ Custom Role (Not Selected)';
         default: return '❌ No Mention';
       }
     };
@@ -153,35 +195,36 @@ module.exports = {
       const config = db.configs.get(guildId);
       const settings = db.notificationSettings.getAll(guildId);
 
-      // Default helper if DB entries are uninitialized
-      const getSet = (type) => settings[type] || { enabled: true, mentionType: 'none' };
+      const getSet = (type) => settings[type] || { enabled: true, mentionType: 'none', mentionRoleId: null };
 
       return embeds.create('info')
-        .setTitle('🔧 Community Setup Dashboard')
-        .setDescription('Use the controls below to configure notifications, channels, active states, and pings for server events.')
+        .setTitle('🔧 Vishwa Bot - Final Notification setup')
+        .setDescription('Configure optional text channels, toggles, and mention styles for all community activities. Non-active features will fail-safe.')
         .addFields(
-          { name: '👥 General Community Channel', value: getChannelMention(config.communityChannel) },
-          { name: '⚡ Level Up Notifications', value: `Channel: ${getChannelMention(config.levelChannel)}\nStatus: ${getSet('level_up').enabled ? '🟢 Enabled' : '🔴 Disabled'}\nMention: ${formatMention(getSet('level_up').mentionType)}` },
-          { name: '🏆 Achievement Alerts', value: `Channel: ${getChannelMention(config.achievementChannel)}\nStatus: ${getSet('achievement').enabled ? '🟢 Enabled' : '🔴 Disabled'}\nMention: ${formatMention(getSet('achievement').mentionType)}` },
-          { name: '🗺️ Quest Announcements', value: `Channel: ${getChannelMention(config.questChannel)}\nStatus: ${getSet('quest').enabled ? '🟢 Enabled' : '🔴 Disabled'}\nMention: ${formatMention(getSet('quest').mentionType)}` },
-          { name: '💰 Economy & Audit Logs', value: `Channel: ${getChannelMention(config.economyLogChannel)}\nStatus: ${getSet('economy').enabled ? '🟢 Enabled' : '🔴 Disabled'}\nMention: ${formatMention(getSet('economy').mentionType)}` },
-          { name: '✨ Rare Drop Broadcasts', value: `Channel: ${getChannelMention(config.rareDropChannel)}\nStatus: ${getSet('rare_drop').enabled ? '🟢 Enabled' : '🔴 Disabled'}\nMention: ${formatMention(getSet('rare_drop').mentionType)}` },
-          { name: '🛒 Shop Purchase Alerts', value: `Channel: ${getChannelMention(config.shopChannel)}\nStatus: ${getSet('shop').enabled ? '🟢 Enabled' : '🔴 Disabled'}\nMention: ${formatMention(getSet('shop').mentionType)}` },
-          { name: '📅 Event Announcements', value: `Channel: ${getChannelMention(config.eventChannel)}\nStatus: 🟢 Always Enabled\nMention: ${formatMention(getSet('event').mentionType)}` }
+          { name: '⚡ Level Up Announcements (HIGH)', value: `Channel: ${getChannelMention(config.announcementChannel)}\nStatus: ${getSet('level_up').enabled ? '🟢 Enabled' : '🔴 Disabled'}\nMention: ${formatMention(getSet('level_up').mentionType, getSet('level_up').mentionRoleId)}` },
+          { name: '💰 Economy & Audit Logs (LOW)', value: `Channel: ${getChannelMention(config.economyLogChannel)}\nStatus: ${getSet('economy_log').enabled ? '🟢 Enabled' : '🔴 Disabled'}\nMention: ${formatMention(getSet('economy_log').mentionType, getSet('economy_log').mentionRoleId)}` },
+          { name: '🛡️ Admin Log Audits (ADMIN)', value: `Channel: ${getChannelMention(config.adminLogChannel)}\nStatus: ${getSet('admin_log').enabled ? '🟢 Enabled' : '🔴 Disabled'}\nMention: ${formatMention(getSet('admin_log').mentionType, getSet('admin_log').mentionRoleId)}` },
+          { name: '🗺️ Quests Channel (Future)', value: `Channel: ${getChannelMention(config.questChannel)}\nStatus: ${getSet('quest').enabled ? '🟢 Enabled' : '🔴 Disabled'}\nMention: ${formatMention(getSet('quest').mentionType, getSet('quest').mentionRoleId)}` },
+          { name: '🛒 Shop Channel (Future)', value: `Channel: ${getChannelMention(config.shopChannel)}\nStatus: ${getSet('shop').enabled ? '🟢 Enabled' : '🔴 Disabled'}\nMention: ${formatMention(getSet('shop').mentionType, getSet('shop').mentionRoleId)}` },
+          { name: '💎 Rare Drop Channel (Future)', value: `Channel: ${getChannelMention(config.rareDropChannel)}\nStatus: ${getSet('rare_drop').enabled ? '🟢 Enabled' : '🔴 Disabled'}\nMention: ${formatMention(getSet('rare_drop').mentionType, getSet('rare_drop').mentionRoleId)}` },
+          { name: '🏆 Achievement Channel (Future)', value: `Channel: ${getChannelMention(config.achievementChannel)}\nStatus: ${getSet('achievement').enabled ? '🟢 Enabled' : '🔴 Disabled'}\nMention: ${formatMention(getSet('achievement').mentionType, getSet('achievement').mentionRoleId)}` },
+          { name: '📊 Leaderboard Channel (Future)', value: `Channel: ${getChannelMention(config.leaderboardChannel)}\nStatus: ${getSet('leaderboard').enabled ? '🟢 Enabled' : '🔴 Disabled'}\nMention: ${formatMention(getSet('leaderboard').mentionType, getSet('leaderboard').mentionRoleId)}` },
+          { name: '📅 Event Channel (Future)', value: `Channel: ${getChannelMention(config.eventChannel)}\nStatus: ${getSet('event').enabled ? '🟢 Enabled' : '🔴 Disabled'}\nMention: ${formatMention(getSet('event').mentionType, getSet('event').mentionRoleId)}` }
         );
     };
 
     // Helper: Build components for main dashboard view
     const buildDashboardComponents = () => {
       const typeSelect = components.createSelectMenu('setup_edit_type', 'Choose notification to edit...', [
-        { label: 'General Community', value: 'community', description: 'Configure fallback community notifications.' },
-        { label: 'Level Up', value: 'level_up', description: 'Configure level-up alerts.' },
-        { label: 'Achievements', value: 'achievement', description: 'Configure achievement alerts.' },
-        { label: 'Quests', value: 'quest', description: 'Configure quest created and completed logs.' },
-        { label: 'Economy', value: 'economy', description: 'Configure economy balance logs.' },
-        { label: 'Rare Drops', value: 'rare_drop', description: 'Configure rare drop logs.' },
-        { label: 'Shop Purchases', value: 'shop', description: 'Configure shop purchase logs.' },
-        { label: 'Event Announcements', value: 'event', description: 'Configure special event announcements.' }
+        { label: 'Level Up', value: 'level_up', description: 'Configure Level Up announcements.' },
+        { label: 'Economy Log', value: 'economy_log', description: 'Configure Economy balance logs.' },
+        { label: 'Admin Log', value: 'admin_log', description: 'Configure Admin audit logs.' },
+        { label: 'Quests (Future)', value: 'quest', description: 'Configure Quest notifications.' },
+        { label: 'Shop (Future)', value: 'shop', description: 'Configure Shop logs.' },
+        { label: 'Rare Drops (Future)', value: 'rare_drop', description: 'Configure Rare Drop broadcasts.' },
+        { label: 'Achievements (Future)', value: 'achievement', description: 'Configure Achievement logs.' },
+        { label: 'Leaderboard (Future)', value: 'leaderboard', description: 'Configure Leaderboard logs.' },
+        { label: 'Events (Future)', value: 'event', description: 'Configure Event announcements.' }
       ]);
 
       const doneBtn = components.createButton('btn_dashboard_done', '💾 Done', ButtonStyle.Success);
@@ -198,24 +241,26 @@ module.exports = {
       const settings = db.notificationSettings.get(guildId, type);
 
       const typeLabels = {
-        'community': 'General Community Fallback',
-        'level_up': 'Level Up Alerts',
-        'achievement': 'Achievement Alerts',
-        'quest': 'Quest Logs',
-        'economy': 'Economy Audit Logs',
-        'rare_drop': 'Rare Drop Broadcasts',
-        'shop': 'Shop Purchase Logs',
-        'event': 'Event Announcements'
+        'level_up': 'Level Up Announcements',
+        'economy_log': 'Economy Log Notifications',
+        'admin_log': 'Admin Log Audits',
+        'quest': 'Quests Channel Logs',
+        'shop': 'Shop Purchases Channel Logs',
+        'rare_drop': 'Rare Drops Broadcasts',
+        'achievement': 'Achievements Channel Logs',
+        'leaderboard': 'Leaderboard Channel Logs',
+        'event': 'Events Channel Logs'
       };
 
       const typeChannelKeys = {
-        'community': 'communityChannel',
-        'level_up': 'levelChannel',
-        'achievement': 'achievementChannel',
+        'level_up': 'announcementChannel',
+        'economy_log': 'economyLogChannel',
+        'admin_log': 'adminLogChannel',
         'quest': 'questChannel',
-        'economy': 'economyLogChannel',
-        'rare_drop': 'rareDropChannel',
         'shop': 'shopChannel',
+        'rare_drop': 'rareDropChannel',
+        'achievement': 'achievementChannel',
+        'leaderboard': 'leaderboardChannel',
         'event': 'eventChannel'
       };
 
@@ -224,45 +269,55 @@ module.exports = {
 
       const embed = embeds.create('info')
         .setTitle(`🔧 Edit Notification: ${typeLabels[type]}`)
-        .setDescription(`Assign channels, toggle enabled/disabled status, or modify pings for **${typeLabels[type]}**.`)
+        .setDescription(`Assign active text channel, toggle notifications, or configure custom role pings for **${typeLabels[type]}**.`)
         .addFields(
           { name: 'Active Channel', value: getChannelMention(activeCh) },
           { name: 'Toggled State', value: settings.enabled ? '🟢 Enabled' : '🔴 Disabled' },
-          { name: 'Mention Setting', value: formatMention(settings.mentionType) }
+          { name: 'Mention Setting', value: formatMention(settings.mentionType, settings.mentionRoleId) }
         );
 
-      // Create a Channel Select Menu component to pick channels directly
       const selectChannel = new ChannelSelectMenuBuilder()
         .setCustomId('setup_sub_channel')
         .setPlaceholder('Select destination channel...')
         .setChannelTypes([ChannelType.GuildText]);
 
+      const selectRole = new RoleSelectMenuBuilder()
+        .setCustomId('setup_sub_role')
+        .setPlaceholder('Select custom ping role...');
+
       const toggleBtn = components.createButton(
         'btn_sub_toggle',
         settings.enabled ? '🟢 Enabled: ON' : '🔴 Enabled: OFF',
-        settings.enabled ? ButtonStyle.Success : ButtonStyle.Danger,
-        type === 'community' // Community fallback channel cannot be disabled this way
+        settings.enabled ? ButtonStyle.Success : ButtonStyle.Danger
       );
 
       const mentionBtn = components.createButton(
         'btn_sub_mention',
-        `Cycle Ping: ${formatMention(settings.mentionType)}`,
+        `Cycle Ping Mode`,
         ButtonStyle.Secondary
       );
 
       const backBtn = components.createButton('btn_sub_back', '◀ Back', ButtonStyle.Secondary);
 
+      // Only show Role Picker row if mention type is custom role
+      const compRows = [
+        components.createRow([selectChannel])
+      ];
+
+      if (settings.mentionType === 'role') {
+        compRows.push(components.createRow([selectRole]));
+      }
+
+      compRows.push(components.createRow([toggleBtn, mentionBtn, backBtn]));
+
       return {
         embed,
-        components: [
-          components.createRow([selectChannel]),
-          components.createRow([toggleBtn, mentionBtn, backBtn])
-        ]
+        components: compRows
       };
     };
 
-    // Respond with initial view
-    const initialContent = wasOptionsUsed ? '✅ Settings applied! Review or edit below:' : '🔧 Configure community setup settings:';
+    // Initial respond
+    const initialContent = wasOptionsUsed ? '✅ Setup options applied! Review or edit below:' : '🔧 Configure community setup settings:';
     
     const reply = await interaction.reply({
       content: initialContent,
@@ -278,17 +333,15 @@ module.exports = {
 
     collector.on('collect', async i => {
       try {
-        const config = db.configs.get(guildId);
-        
-        // Define channel keys lookup
         const typeChannelKeys = {
-          'community': 'communityChannel',
-          'level_up': 'levelChannel',
-          'achievement': 'achievementChannel',
+          'level_up': 'announcementChannel',
+          'economy_log': 'economyLogChannel',
+          'admin_log': 'adminLogChannel',
           'quest': 'questChannel',
-          'economy': 'economyLogChannel',
-          'rare_drop': 'rareDropChannel',
           'shop': 'shopChannel',
+          'rare_drop': 'rareDropChannel',
+          'achievement': 'achievementChannel',
+          'leaderboard': 'leaderboardChannel',
           'event': 'eventChannel'
         };
 
@@ -305,6 +358,17 @@ module.exports = {
           const chKey = typeChannelKeys[currentEditType];
           
           db.configs.update(guildId, { [chKey]: selectedChId });
+          
+          const editor = buildSubEditor(currentEditType);
+          await i.update({
+            embeds: [editor.embed],
+            components: editor.components
+          });
+        } else if (i.isRoleSelectMenu() && i.customId === 'setup_sub_role') {
+          const selectedRoleId = i.values[0];
+          const settings = db.notificationSettings.get(guildId, currentEditType);
+          
+          db.notificationSettings.set(guildId, currentEditType, settings.enabled, 'role', selectedRoleId);
           
           const editor = buildSubEditor(currentEditType);
           await i.update({
@@ -328,7 +392,7 @@ module.exports = {
             });
           } else if (i.customId === 'btn_sub_toggle') {
             const settings = db.notificationSettings.get(guildId, currentEditType);
-            db.notificationSettings.set(guildId, currentEditType, !settings.enabled, settings.mentionType);
+            db.notificationSettings.set(guildId, currentEditType, !settings.enabled, settings.mentionType, settings.mentionRoleId);
             
             const editor = buildSubEditor(currentEditType);
             await i.update({
@@ -337,11 +401,11 @@ module.exports = {
             });
           } else if (i.customId === 'btn_sub_mention') {
             const settings = db.notificationSettings.get(guildId, currentEditType);
-            const cycle = ['none', 'user', 'here', 'everyone'];
+            const cycle = ['none', 'user', 'here', 'everyone', 'role'];
             const nextIdx = (cycle.indexOf(settings.mentionType) + 1) % cycle.length;
             const nextMention = cycle[nextIdx];
             
-            db.notificationSettings.set(guildId, currentEditType, settings.enabled, nextMention);
+            db.notificationSettings.set(guildId, currentEditType, settings.enabled, nextMention, settings.mentionRoleId);
             
             const editor = buildSubEditor(currentEditType);
             await i.update({
@@ -351,7 +415,7 @@ module.exports = {
           }
         }
       } catch (err) {
-        console.error('[community cmd] Interaction error:', err);
+        console.error('[community setup cmd] Interaction error:', err);
       }
     });
 

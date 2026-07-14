@@ -155,6 +155,9 @@ class SqlJsWrapper {
         event_channel_id TEXT DEFAULT NULL,
         rare_drop_channel_id TEXT DEFAULT NULL,
         shop_channel_id TEXT DEFAULT NULL,
+        announcement_channel_id TEXT DEFAULT NULL,
+        leaderboard_channel_id TEXT DEFAULT NULL,
+        admin_log_channel_id TEXT DEFAULT NULL,
         updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
       );
 
@@ -310,6 +313,7 @@ class SqlJsWrapper {
         notification_type TEXT NOT NULL,
         enabled BOOLEAN DEFAULT 1,
         mention_type TEXT DEFAULT 'none',
+        mention_role_id TEXT DEFAULT NULL,
         PRIMARY KEY (guild_id, notification_type),
         FOREIGN KEY (guild_id) REFERENCES guild_configs(guild_id) ON DELETE CASCADE
       );
@@ -353,6 +357,18 @@ class SqlJsWrapper {
     } catch (e) {}
     try {
       this.db.exec('ALTER TABLE guild_configs ADD COLUMN shop_channel_id TEXT DEFAULT NULL');
+    } catch (e) {}
+    try {
+      this.db.exec('ALTER TABLE guild_configs ADD COLUMN announcement_channel_id TEXT DEFAULT NULL');
+    } catch (e) {}
+    try {
+      this.db.exec('ALTER TABLE guild_configs ADD COLUMN leaderboard_channel_id TEXT DEFAULT NULL');
+    } catch (e) {}
+    try {
+      this.db.exec('ALTER TABLE guild_configs ADD COLUMN admin_log_channel_id TEXT DEFAULT NULL');
+    } catch (e) {}
+    try {
+      this.db.exec('ALTER TABLE notification_settings ADD COLUMN mention_role_id TEXT DEFAULT NULL');
     } catch (e) {}
   }
 
@@ -448,6 +464,9 @@ class GuildConfigRepository {
     this.updateEventChannel = db.prepare('UPDATE guild_configs SET event_channel_id = ? WHERE guild_id = ?');
     this.updateRareDropChannel = db.prepare('UPDATE guild_configs SET rare_drop_channel_id = ? WHERE guild_id = ?');
     this.updateShopChannel = db.prepare('UPDATE guild_configs SET shop_channel_id = ? WHERE guild_id = ?');
+    this.updateAnnouncementChannel = db.prepare('UPDATE guild_configs SET announcement_channel_id = ? WHERE guild_id = ?');
+    this.updateLeaderboardChannel = db.prepare('UPDATE guild_configs SET leaderboard_channel_id = ? WHERE guild_id = ?');
+    this.updateAdminLogChannel = db.prepare('UPDATE guild_configs SET admin_log_channel_id = ? WHERE guild_id = ?');
   }
 
   /**
@@ -490,6 +509,9 @@ class GuildConfigRepository {
       if (updates.eventChannel !== undefined) this.updateEventChannel.run(updates.eventChannel, guildId);
       if (updates.rareDropChannel !== undefined) this.updateRareDropChannel.run(updates.rareDropChannel, guildId);
       if (updates.shopChannel !== undefined) this.updateShopChannel.run(updates.shopChannel, guildId);
+      if (updates.announcementChannel !== undefined) this.updateAnnouncementChannel.run(updates.announcementChannel, guildId);
+      if (updates.leaderboardChannel !== undefined) this.updateLeaderboardChannel.run(updates.leaderboardChannel, guildId);
+      if (updates.adminLogChannel !== undefined) this.updateAdminLogChannel.run(updates.adminLogChannel, guildId);
       
       if (updates.spamThreshold !== undefined || updates.spamInterval !== undefined) {
         const current = this.get(guildId);
@@ -526,7 +548,10 @@ class GuildConfigRepository {
       achievementChannel: row.achievement_channel_id,
       eventChannel: row.event_channel_id,
       rareDropChannel: row.rare_drop_channel_id,
-      shopChannel: row.shop_channel_id
+      shopChannel: row.shop_channel_id,
+      announcementChannel: row.announcement_channel_id,
+      leaderboardChannel: row.leaderboard_channel_id,
+      adminLogChannel: row.admin_log_channel_id
     };
   }
 }
@@ -1048,9 +1073,9 @@ class NotificationSettingsRepository {
     this.selectStmt = db.prepare('SELECT * FROM notification_settings WHERE guild_id = ? AND notification_type = ?');
     this.selectAllStmt = db.prepare('SELECT * FROM notification_settings WHERE guild_id = ?');
     this.upsertStmt = db.prepare(`
-      INSERT INTO notification_settings (guild_id, notification_type, enabled, mention_type)
-      VALUES (?, ?, ?, ?)
-      ON CONFLICT(guild_id, notification_type) DO UPDATE SET enabled = excluded.enabled, mention_type = excluded.mention_type
+      INSERT INTO notification_settings (guild_id, notification_type, enabled, mention_type, mention_role_id)
+      VALUES (?, ?, ?, ?, ?)
+      ON CONFLICT(guild_id, notification_type) DO UPDATE SET enabled = excluded.enabled, mention_type = excluded.mention_type, mention_role_id = excluded.mention_role_id
     `);
   }
 
@@ -1060,12 +1085,14 @@ class NotificationSettingsRepository {
     if (!row) {
       return {
         enabled: true,
-        mentionType: 'none'
+        mentionType: 'none',
+        mentionRoleId: null
       };
     }
     return {
       enabled: !!row.enabled,
-      mentionType: row.mention_type
+      mentionType: row.mention_type,
+      mentionRoleId: row.mention_role_id || null
     };
   }
 
@@ -1076,15 +1103,16 @@ class NotificationSettingsRepository {
     for (const r of rows) {
       map[r.notification_type] = {
         enabled: !!r.enabled,
-        mentionType: r.mention_type
+        mentionType: r.mention_type,
+        mentionRoleId: r.mention_role_id || null
       };
     }
     return map;
   }
 
-  set(guildId, type, enabled, mentionType) {
+  set(guildId, type, enabled, mentionType, mentionRoleId = null) {
     this.configs.get(guildId);
-    this.upsertStmt.run(guildId, type, enabled ? 1 : 0, mentionType);
+    this.upsertStmt.run(guildId, type, enabled ? 1 : 0, mentionType, mentionRoleId);
     return this.get(guildId, type);
   }
 }

@@ -41,11 +41,61 @@ class NotificationService {
     }
   }
 
+  getIcon(type) {
+    const icons = {
+      level_up: '⚡',
+      daily_reward: '🎁',
+      coins_added: '➕',
+      coins_removed: '➖',
+      coins_set: '⚙️',
+      coins_reset: '🔄',
+      xp_added: '✨',
+      xp_removed: '📉',
+      xp_set: '🔧',
+      xp_reset: '🔃',
+      deposit: '🏦',
+      withdraw: '💸',
+      reward_transaction: '🪙',
+      economy_config_changed: '🛠️',
+      admin_economy_command: '🛡️',
+      admin_xp_command: '🛡️',
+      quest: '🗺️',
+      shop: '🛒',
+      rare_drop: '💎',
+      achievement: '🏆',
+      leaderboard: '📊',
+      event: '📅'
+    };
+    return icons[type] || '📢';
+  }
+
+  _buildGamingEmbed(guild, title, description, type, importanceLevel) {
+    const container = require('./container');
+    const embeds = container.resolve('embeds');
+
+    // Mapped neon colors
+    const colors = {
+      low: 0x5865F2,     // Neon Blurple
+      high: 0xBD00FF,    // Neon Purple/Magenta
+      admin: 0xFF003C    // Neon Red
+    };
+
+    const color = colors[importanceLevel.toLowerCase()] || colors.high;
+    const icon = this.getIcon(type);
+
+    return embeds.create('info')
+      .setColor(color)
+      .setTitle(`${icon} ${title}`)
+      .setDescription(description)
+      .setFooter({ text: '🎮 Vishwa Bot Community Core' })
+      .setTimestamp();
+  }
+
   /**
    * Helper: Resolves destination channel and sends the notification.
    * @private
    */
-  async _dispatch(guild, type, channelKey, getEmbed, defaultTemplate, context) {
+  async _dispatchGeneric({ guild, type, channelKey, importance, title, template, user, target, context }) {
     const container = require('./container');
     const db = container.resolve('db');
     const templates = container.resolve('templates');
@@ -59,43 +109,74 @@ class NotificationService {
 
     // 2. Resolve destination channel
     const config = db.configs.get(guild.id);
-    const channelId = config[channelKey] || config.communityChannel;
+    const channelId = config[channelKey];
     if (!channelId) {
-      console.warn(`[NotificationService] Skipped notification type "${type}" in "${guild.name}" — channel not configured.`);
+      console.log(`[NotificationService] Skipped notification type "${type}" in "${guild.name}" — channel not configured.`);
       return null;
     }
 
-    // Attempt to get channel from cache or fetch
-    let channel = guild.channels.cache.get(channelId);
-    if (!channel) {
-      try {
+    // 3. Try to get channel and check permissions
+    let channel;
+    try {
+      channel = guild.channels.cache.get(channelId);
+      if (!channel) {
         channel = await guild.channels.fetch(channelId);
-      } catch (err) {
-        console.error(`[NotificationService] Failed to fetch channel "${channelId}" in "${guild.name}":`, err.message);
+      }
+    } catch (err) {
+      if (container.has('errors')) {
+        container.resolve('errors').log(err, `notification_channel_fetch_error:${type}:${guild.id}`);
+      } else {
+        console.error(`[NotificationService] Failed to fetch channel "${channelId}":`, err.message);
+      }
+      return null;
+    }
+
+    if (!channel || typeof channel.send !== 'function') {
+      console.log(`[NotificationService] Skipped notification type "${type}" in "${guild.name}" — invalid or deleted channel.`);
+      return null;
+    }
+
+    // Check bot permissions in this channel
+    const botMember = guild.members.me;
+    if (botMember) {
+      const perms = channel.permissionsFor(botMember);
+      if (perms && (!perms.has('SendMessages') || !perms.has('EmbedLinks'))) {
+        const missingPermsErr = new Error(`Missing SendMessages or EmbedLinks permissions in channel ${channel.name}`);
+        if (container.has('errors')) {
+          container.resolve('errors').log(missingPermsErr, `notification_missing_permissions:${type}:${guild.id}`);
+        } else {
+          console.error(`[NotificationService] Missing permissions in channel "${channel.name}": SendMessages / EmbedLinks`);
+        }
         return null;
       }
     }
 
-    if (!channel || typeof channel.send !== 'function') {
-      console.warn(`[NotificationService] Skipped notification type "${type}" in "${guild.name}" — invalid text channel.`);
-      return null;
-    }
+    // 4. Parse content using TemplateEngine
+    const parseCtx = {
+      server: guild.name,
+      ...context
+    };
+    if (user) parseCtx.user = user;
+    if (target) parseCtx.target = target;
 
-    // 3. Parse content/embed templates
-    const textVal = templates.parse(defaultTemplate, context);
-    const embed = getEmbed(embed => embed.setDescription(textVal));
+    const description = templates.parse(template, parseCtx);
 
-    // 4. Resolve pings
+    // 5. Build premium Gaming Theme embed
+    const embed = this._buildGamingEmbed(guild, title, description, type, importance);
+
+    // 6. Resolve mention pings
     let pingContent = '';
-    if (settings.mentionType === 'user' && context.user) {
-      pingContent = typeof context.user === 'object' ? context.user.toString() : String(context.user);
+    if (settings.mentionType === 'user' && user) {
+      pingContent = typeof user === 'object' ? user.toString() : String(user);
     } else if (settings.mentionType === 'here') {
       pingContent = '@here';
     } else if (settings.mentionType === 'everyone') {
       pingContent = '@everyone';
+    } else if (settings.mentionType === 'role' && settings.mentionRoleId) {
+      pingContent = `<@&${settings.mentionRoleId}>`;
     }
 
-    // 5. Send message
+    // 7. Dispatch message
     const payload = { embeds: [embed] };
     if (pingContent) {
       payload.content = pingContent;
@@ -106,209 +187,168 @@ class NotificationService {
       return await channel.send(payload);
     } catch (err) {
       if (container.has('errors')) {
-        container.resolve('errors').log(err, `notification_send:${type}:${guild.id}`);
+        container.resolve('errors').log(err, `notification_send_error:${type}:${guild.id}`);
       } else {
-        console.error(`[NotificationService] Failed to send notification in "${guild.name}":`, err);
+        console.error(`[NotificationService] Failed to send message in channel "${channel.name}":`, err);
       }
       return null;
     }
   }
 
-  async sendLevelUp(guild, user, level, xp, rank) {
-    const container = require('./container');
-    const embeds = container.resolve('embeds');
+  async sendAnnouncement(guild, type, user, context = {}) {
+    const defaultTemplates = {
+      level_up: 'Congratulations {user}, you have leveled up to level **{level}**! 🎉'
+    };
+    const template = defaultTemplates[type] || 'Announcement: {reward}';
 
-    return this._dispatch(
+    return this._dispatchGeneric({
       guild,
-      'level_up',
-      'levelChannel',
-      build => {
-        const embed = embeds.create('success')
-          .setTitle('⚡ Level Up!')
-          .addFields(
-            { name: 'Level', value: `\`${level}\``, inline: true },
-            { name: 'XP', value: `\`${xp}\``, inline: true }
-          );
-        if (rank) {
-          embed.addFields({ name: 'Rank', value: `\`#${rank}\``, inline: true });
-        }
-        if (user && user.displayAvatarURL) {
-          embed.setThumbnail(user.displayAvatarURL({ dynamic: true }));
-        }
-        return build(embed);
-      },
-      'Congratulations {user}, you have leveled up to level **{level}**! 🎉',
-      { user, server: guild.name, level, xp, rank }
-    );
+      type,
+      channelKey: 'announcementChannel',
+      importance: 'high',
+      title: 'Announcement Alert',
+      template,
+      user,
+      context: { ...context, user }
+    });
   }
 
-  async sendAchievement(guild, user, badge, title) {
-    const container = require('./container');
-    const embeds = container.resolve('embeds');
+  async sendEconomyLog(guild, type, user, amount, context = {}) {
+    const defaultTemplates = {
+      daily_reward: '{user} claimed their daily reward and earned **{coins} coins**! 🔥',
+      coins_added: 'Successfully added **{coins} coins** to {user}.',
+      coins_removed: 'Successfully removed **{coins} coins** from {user}.',
+      coins_set: 'Set {user}\'s coins balance to **{coins}**.',
+      coins_reset: 'Reset {user}\'s coins balance.',
+      xp_added: 'Successfully added **{xp} XP** to {user}.',
+      xp_removed: 'Successfully removed **{xp} XP** from {user}.',
+      xp_set: 'Set {user}\'s XP balance to **{xp}**.',
+      xp_reset: 'Reset {user}\'s XP balance.',
+      deposit: '{user} deposited **{coins} coins** into the bank.',
+      withdraw: '{user} withdrew **{coins} coins** from the bank.',
+      reward_transaction: 'Rewarded {user} **{coins} coins** (Source: {reward}).'
+    };
 
-    return this._dispatch(
+    const template = defaultTemplates[type] || 'Economy action: {reward}';
+    const formattedType = type.split('_').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ');
+
+    return this._dispatchGeneric({
       guild,
-      'achievement',
-      'achievementChannel',
-      build => {
-        const embed = embeds.create('success')
-          .setTitle('🏆 Achievement Unlocked!')
-          .addFields(
-            { name: 'Badge', value: `**${badge}**`, inline: true },
-            { name: 'Title', value: `*${title}*`, inline: true }
-          );
-        if (user && user.displayAvatarURL) {
-          embed.setThumbnail(user.displayAvatarURL({ dynamic: true }));
-        }
-        return build(embed);
-      },
-      'Amazing job {user}! You unlocked the achievement **{badge}** - *{title}*!',
-      { user, server: guild.name, badge, title }
-    );
+      type,
+      channelKey: 'economyLogChannel',
+      importance: 'low',
+      title: `Economy Log: ${formattedType}`,
+      template,
+      user,
+      context: {
+        ...context,
+        coins: amount,
+        xp: amount,
+        reward: context.reason || context.source || ''
+      }
+    });
   }
 
-  async sendQuestCreated(guild, quest, coins, xp) {
-    const container = require('./container');
-    const embeds = container.resolve('embeds');
+  async sendAdminLog(guild, type, admin, target, context = {}) {
+    const defaultTemplates = {
+      economy_config_changed: '🛡️ Admin {user} changed the economy configurations: {reward}',
+      admin_economy_command: '🛡️ Admin {user} executed economy command on target {target}. Details: {reward}',
+      admin_xp_command: '🛡️ Admin {user} executed XP command on target {target}. Details: {reward}'
+    };
 
-    const reward = `${coins ? `${coins} coins` : ''}${coins && xp ? ' & ' : ''}${xp ? `${xp} XP` : ''}`;
+    const template = defaultTemplates[type] || 'Admin action by {user}';
+    const formattedType = type.split('_').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ');
 
-    return this._dispatch(
+    return this._dispatchGeneric({
       guild,
-      'quest',
-      'questChannel',
-      build => {
-        const embed = embeds.create('info')
-          .setTitle('🗺️ New Quest Available!')
-          .addFields(
-            { name: 'Quest', value: `**${quest}**`, inline: true },
-            { name: 'Rewards', value: `\`${reward}\``, inline: true }
-          );
-        return build(embed);
-      },
-      'A new quest is available on {server}: **{quest}**! Reward: {reward}',
-      { server: guild.name, quest, coins, xp, reward }
-    );
+      type,
+      channelKey: 'adminLogChannel',
+      importance: 'admin',
+      title: `Admin Audit: ${formattedType}`,
+      template,
+      user: admin,
+      target,
+      context: {
+        ...context,
+        reward: context.reason || context.details || ''
+      }
+    });
   }
 
-  async sendQuestCompleted(guild, user, quest, reward) {
-    const container = require('./container');
-    const embeds = container.resolve('embeds');
-
-    return this._dispatch(
+  async sendQuestNotification(guild, type, user, context = {}) {
+    return this._dispatchGeneric({
       guild,
-      'quest',
-      'questChannel',
-      build => {
-        const embed = embeds.create('success')
-          .setTitle('✅ Quest Completed!')
-          .addFields(
-            { name: 'Quest', value: `**${quest}**`, inline: true },
-            { name: 'Reward Claimed', value: `\`${reward}\``, inline: true }
-          );
-        if (user && user.displayAvatarURL) {
-          embed.setThumbnail(user.displayAvatarURL({ dynamic: true }));
-        }
-        return build(embed);
-      },
-      '{user} has completed the quest **{quest}** and claimed **{reward}**!',
-      { user, server: guild.name, quest, reward }
-    );
+      type,
+      channelKey: 'questChannel',
+      importance: 'high',
+      title: `Quest Update: ${type}`,
+      template: 'Quest Alert for {user}: {reward}',
+      user,
+      context
+    });
   }
 
-  async sendRareDrop(guild, user, item, rarity) {
-    const container = require('./container');
-    const embeds = container.resolve('embeds');
-
-    return this._dispatch(
+  async sendShopNotification(guild, type, user, context = {}) {
+    return this._dispatchGeneric({
       guild,
-      'rare_drop',
-      'rareDropChannel',
-      build => {
-        const embed = embeds.create('warn')
-          .setTitle('✨ Rare Drop!')
-          .addFields(
-            { name: 'Item', value: `🎁 **${item}**`, inline: true },
-            { name: 'Rarity', value: `\`${rarity}\``, inline: true }
-          );
-        if (user && user.displayAvatarURL) {
-          embed.setThumbnail(user.displayAvatarURL({ dynamic: true }));
-        }
-        return build(embed);
-      },
-      'Oh my! {user} got a rare drop on {server}: **{item}** ({rank})!',
-      { user, server: guild.name, item, badge: rarity, rank: rarity }
-    );
+      type,
+      channelKey: 'shopChannel',
+      importance: 'low',
+      title: `Shop Update: ${type}`,
+      template: 'Shop purchase/refresh alert: {reward}',
+      user,
+      context
+    });
   }
 
-  async sendEconomyLog(guild, logText) {
-    const container = require('./container');
-    const embeds = container.resolve('embeds');
-
-    const coinsMatch = logText.match(/(-?\d+)\s*coins/i);
-    const coins = coinsMatch ? coinsMatch[1] : '';
-
-    return this._dispatch(
+  async sendRareDrop(guild, type, user, context = {}) {
+    return this._dispatchGeneric({
       guild,
-      'economy',
-      'economyLogChannel',
-      build => {
-        const embed = embeds.create('warn')
-          .setTitle('💰 Economy Audit Log');
-        return build(embed);
-      },
-      'Audit alert: {reward}',
-      { server: guild.name, reward: logText, coins }
-    );
+      type,
+      channelKey: 'rareDropChannel',
+      importance: 'high',
+      title: `Rare Drop: ${type}`,
+      template: 'Rare item drop alert: {reward}',
+      user,
+      context
+    });
   }
 
-  async sendShopPurchase(guild, user, item, coins) {
-    const container = require('./container');
-    const embeds = container.resolve('embeds');
-
-    return this._dispatch(
+  async sendAchievement(guild, type, user, context = {}) {
+    return this._dispatchGeneric({
       guild,
-      'shop',
-      'shopChannel',
-      build => {
-        const embed = embeds.create('info')
-          .setTitle('🛒 Shop Purchase')
-          .addFields(
-            { name: 'Item Purchased', value: `**${item}**`, inline: true },
-            { name: 'Price Paid', value: `\`${coins} coins\``, inline: true }
-          );
-        if (user && user.displayAvatarURL) {
-          embed.setThumbnail(user.displayAvatarURL({ dynamic: true }));
-        }
-        return build(embed);
-      },
-      '{user} purchased **{item}** from the shop for **{coins} coins**!',
-      { user, server: guild.name, item, coins }
-    );
+      type,
+      channelKey: 'achievementChannel',
+      importance: 'high',
+      title: `Achievement: ${type}`,
+      template: 'Achievement unlock alert: {reward}',
+      user,
+      context
+    });
   }
 
-  async sendEventAnnouncement(guild, title, reward) {
-    const container = require('./container');
-    const embeds = container.resolve('embeds');
-
-    return this._dispatch(
+  async sendLeaderboard(guild, type, context = {}) {
+    return this._dispatchGeneric({
       guild,
-      'event',
-      'eventChannel',
-      build => {
-        const embed = embeds.create('info')
-          .setTitle('📅 Event Announcement')
-          .addFields(
-            { name: 'Event', value: `**${title}**`, inline: true }
-          );
-        if (reward) {
-          embed.addFields({ name: 'Rewards / Details', value: `\`${reward}\``, inline: true });
-        }
-        return build(embed);
-      },
-      '📢 Attention! A new server event is happening: **{title}**! Reward: {reward}',
-      { server: guild.name, title, reward }
-    );
+      type,
+      channelKey: 'leaderboardChannel',
+      importance: 'high',
+      title: `Leaderboard Update: ${type}`,
+      template: 'Leaderboard alert: {reward}',
+      context
+    });
+  }
+
+  async sendEvent(guild, type, context = {}) {
+    return this._dispatchGeneric({
+      guild,
+      type,
+      channelKey: 'eventChannel',
+      importance: 'high',
+      title: `Event Update: ${type}`,
+      template: 'Event alert: {reward}',
+      context
+    });
   }
 }
 
