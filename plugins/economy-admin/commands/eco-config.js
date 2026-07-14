@@ -53,13 +53,27 @@ module.exports = {
       const channel = interaction.options.getChannel('channel');
       console.log(`[TRACE_CMD] Option channel ID received from Discord: ${channel.id}`);
       
-      const updateObj = { communityChannel: channel.id };
-      console.log(`[TRACE_CMD] Immediately before calling db.configs.update(). Guild ID: ${guildId}, Update Object:`, updateObj);
-      console.log(`[TRACE_CMD] Invoking db.configs.update().`);
+      const updateObj = {
+        communityChannel: channel.id,
+        announcementChannel: channel.id
+      };
+      
+      console.log(`Guild ID: ${guildId}`);
+      console.log(`Update object:`, updateObj);
+      console.log(`Property name: communityChannel, announcementChannel`);
+      console.log(`Channel ID: ${channel.id}`);
+      
       db.configs.update(guildId, updateObj);
 
-      const reloaded = db.configs.get(guildId);
-      console.log(`[TRACE_CMD] Immediately after db.configs.update(). Returned configuration:`, reloaded);
+      console.log(`SELECT * FROM guild_configs WHERE guild_id = ?`);
+      const stmt = db.sqlite.db.prepare('SELECT * FROM guild_configs WHERE guild_id = ?');
+      stmt.bind([guildId]);
+      let rawRow;
+      if (stmt.step()) {
+        rawRow = stmt.getAsObject();
+      }
+      stmt.free();
+      console.log(rawRow);
 
       const eventBus = require('../../../utils/eventBus');
       eventBus.publish('adminLog', {
