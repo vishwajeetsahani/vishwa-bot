@@ -47,11 +47,21 @@ module.exports = {
   modOnly: true,
 
   async execute(interaction, client) {
-    // 1. Enforce permission middleware
-    const hasPermission = await enforceEconomyManager(interaction);
-    if (!hasPermission) return;
+    await interaction.deferReply({
+      ephemeral: true
+    });
 
-    const subcommand = interaction.options.getSubcommand();
+    const originalReply = interaction.reply;
+    interaction.reply = async (options) => {
+      return await interaction.editReply(options);
+    };
+
+    try {
+      // 1. Enforce permission middleware
+      const hasPermission = await enforceEconomyManager(interaction);
+      if (!hasPermission) return;
+
+      const subcommand = interaction.options.getSubcommand();
     const targetUser = interaction.options.getUser('user');
     const guildId = interaction.guild.id;
     const moderatorId = interaction.user.id;
@@ -89,13 +99,13 @@ module.exports = {
         .setTimestamp();
 
       await sendEconomyLog(interaction.guild, client, embed);
-      return interaction.reply({ embeds: [embed] });
+      return interaction.editReply({ embeds: [embed] });
     }
 
     if (subcommand === 'remove') {
       const amount = interaction.options.getInteger('amount');
       if (previousValue < amount) {
-        return interaction.reply({
+        return interaction.editReply({
           content: `❌ Target user only has **${previousValue.toLocaleString()} XP**. Cannot remove **${amount.toLocaleString()} XP**.`,
           ephemeral: true
         });
@@ -121,7 +131,7 @@ module.exports = {
         .setTimestamp();
 
       await sendEconomyLog(interaction.guild, client, embed);
-      return interaction.reply({ embeds: [embed] });
+      return interaction.editReply({ embeds: [embed] });
     }
 
     if (subcommand === 'set') {
@@ -147,7 +157,7 @@ module.exports = {
         .setTimestamp();
 
       await sendEconomyLog(interaction.guild, client, embed);
-      return interaction.reply({ embeds: [embed] });
+      return interaction.editReply({ embeds: [embed] });
     }
 
     if (subcommand === 'reset') {
@@ -169,7 +179,20 @@ module.exports = {
         .setTimestamp();
 
       await sendEconomyLog(interaction.guild, client, embed);
-      return interaction.reply({ embeds: [embed] });
+      return interaction.editReply({ embeds: [embed] });
+    }
+    } catch (error) {
+      console.error(error);
+      try {
+        await interaction.editReply({
+          content: '❌ An error occurred while executing this command.',
+          ephemeral: true
+        });
+      } catch (err) {
+        console.error('Failed to send error reply:', err);
+      }
+    } finally {
+      interaction.reply = originalReply;
     }
   }
 };
