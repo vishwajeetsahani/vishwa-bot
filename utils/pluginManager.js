@@ -12,6 +12,7 @@
 
 const fs = require('fs');
 const path = require('path');
+const crypto = require('crypto');
 const { Collection } = require('discord.js');
 
 const PLUGINS_DIR = path.join(__dirname, '..', 'plugins');
@@ -111,8 +112,16 @@ function loadPlugins(client) {
     if (fs.existsSync(commandsPath)) {
       const commandFiles = getJsFiles(commandsPath);
       for (const file of commandFiles) {
-        console.log(`[PluginManager] Discovered command file: ${path.basename(file)}`);
         try {
+          const stats = fs.statSync(file);
+          const fileContent = fs.readFileSync(file);
+          const sha256 = crypto.createHash('sha256').update(fileContent).digest('hex');
+          
+          console.log(`Loading command:\n${file}`);
+          console.log(`File size: ${stats.size} bytes`);
+          console.log(`Modified time: ${stats.mtime.toISOString()}`);
+          console.log(`SHA256: ${sha256}`);
+
           const command = require(file);
           if (!command.data || !command.data.name || typeof command.execute !== 'function') {
             console.warn(`[PluginManager] Invalid command skipped at: ${file}`);
