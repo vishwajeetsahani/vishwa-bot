@@ -52,19 +52,22 @@ module.exports = {
     if (subcommand === 'community') {
       const channel = interaction.options.getChannel('channel');
       console.log(`TRACE_CMD: Option channel ID received from Discord: ${channel.id}`);
-      
+
       const updateObj = {
         communityChannel: channel.id,
         announcementChannel: channel.id
       };
-      
+
       console.log(`TRACE_CMD: Guild ID: ${guildId}`);
       console.log(`TRACE_CMD: Update object:`, updateObj);
       console.log(`TRACE_CMD: Property name: communityChannel, announcementChannel`);
       console.log(`TRACE_CMD: Channel ID: ${channel.id}`);
-      
-      db.configs.update(guildId, updateObj);
 
+      console.log(`[TRACE_CMD] (4) Invoking db.configs.update(guildId, updateObj)`);
+      const updateRes = db.configs.update(guildId, updateObj);
+      console.log(`[TRACE_CMD] (4b) db.configs.update() returned:`, updateRes);
+
+      console.log(`[TRACE_CMD] (5) Raw SQLite row after UPDATE (direct SELECT)`);
       console.log(`SELECT * FROM guild_configs WHERE guild_id = ?`);
       const stmt = db.sqlite.db.prepare('SELECT * FROM guild_configs WHERE guild_id = ?');
       stmt.bind([guildId]);
@@ -73,11 +76,15 @@ module.exports = {
         rawRow = stmt.getAsObject();
       }
       stmt.free();
-      console.log(rawRow);
+      console.log(`[TRACE_CMD] Raw row:`, rawRow);
 
+      console.log(`[TRACE_CMD] (6) db.configs.get(guildId) returned configuration object`);
       const config = await db.configs.get(interaction.guild.id);
-      console.log('Loaded config:', config);
-      console.log(config);
+      console.log(`[TRACE_CMD] Returned config:`, config);
+
+      console.log(`[TRACE_CMD] (7) announcementChannel in returned config:`, config ? config.announcementChannel : null);
+      console.log(`[TRACE_CMD] (8) economyLogChannel in returned config:`, config ? config.economyLogChannel : null);
+
 
       const eventBus = require('../../../utils/eventBus');
       eventBus.publish('adminLog', {
@@ -97,7 +104,7 @@ module.exports = {
     if (subcommand === 'logs') {
       const channel = interaction.options.getChannel('channel');
       console.log(`[TRACE_CMD] Option channel ID received from Discord: ${channel.id}`);
-      
+
       const updateObj = { economyLogChannel: channel.id };
       console.log(`[TRACE_CMD] Immediately before calling db.configs.update(). Guild ID: ${guildId}, Update Object:`, updateObj);
       console.log(`[TRACE_CMD] Invoking db.configs.update().`);
@@ -124,7 +131,7 @@ module.exports = {
     if (subcommand === 'role') {
       const role = interaction.options.getRole('role');
       console.log(`[TRACE_CMD] Option role ID received from Discord: ${role.id}`);
-      
+
       const updateObj = { economyManagerRole: role.id };
       console.log(`[TRACE_CMD] Immediately before calling db.configs.update(). Guild ID: ${guildId}, Update Object:`, updateObj);
       console.log(`[TRACE_CMD] Invoking db.configs.update().`);
